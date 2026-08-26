@@ -1,0 +1,22 @@
+# Private training data. School and prelim questions never leave this machine.
+data/private/
+*.jsonl
+
+# Model artefacts. The transformer is 268 MB and is never committed. The TF-IDF
+# classifier was committed deliberately, with git add -f, so predict.py runs from
+# a clone; it stays ignored here so that retraining it does not put a new one into
+# a public repository on the next git add -A.
+models/*
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+.DS_Store

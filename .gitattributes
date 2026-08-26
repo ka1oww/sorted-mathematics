@@ -1,0 +1,6 @@
+# Keep GitHub's language stats on the code. Markdown counts as a language
+# otherwise, and the prose here is documentation, not the project.
+*.md linguist-documentation
+
+# Normalise line endings so a checkout on Windows does not rewrite the source.
+* text=auto eol=lf
