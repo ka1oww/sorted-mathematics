@@ -5,15 +5,23 @@ so nothing in it is typed by hand. DATA-PLAN.md section 7 asks for exactly
 this: a row count, per-chapter counts and a content hash, with every accuracy
 quoted against a named frozen dataset.
 
-Approach 2 is included only if models/chapter_transformer exists; without it
-the report covers Approach 1 and says so.
+The two approaches are compared symmetrically. Both are read from the run
+ledger in data/private/runs/ (see src/runs.py), where each is the same three
+from-scratch seed runs under the same procedure on the same frozen split, so
+neither side is a single draw. Every accuracy carries a 95% interval, both
+models' predictions on the same 246 questions are put through an exact paired
+test, and the verdict paragraph is chosen by a rule fixed in this file, not
+typed after the numbers were seen. Approach 2 is included only if the ledger
+holds transformer runs against the current test split; without them the report
+covers Approach 1 and says so.
 
 Run from the project root:  python3 tools/report_results.py
+The ledger is filled by:     python3 tools/compare_runs.py seeds --record
 """
 
 import argparse
-import hashlib
 import json
+import statistics
 import sys
 from collections import Counter
 from pathlib import Path
@@ -30,16 +38,30 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from chapters import CHAPTERS, CHAPTER_SLUGS  # noqa: E402
 from features import read_split, to_features  # noqa: E402
+from intervals import (intervals_overlap, mcnemar_exact_p,  # noqa: E402
+                       paired_difference_interval, paired_outcomes, spread,
+                       wilson_interval)
 from paths import MODELS_DIR, PRIVATE_DATA, assert_inside_project  # noqa: E402
 from predict import classify  # noqa: E402
+from runs import (APPROACH_ONE, APPROACH_TWO, DEFAULT_SEEDS, METHOD,  # noqa: E402
+                  file_hash, load_runs, resplit_tfidf, split_hash)
+from split import read_rows  # noqa: E402
 
 DOCS_DIR = PROJECT_ROOT / "docs"
 RESULTS_PATH = PROJECT_ROOT / "RESULTS.md"
 CLASSIFIER_PATH = MODELS_DIR / "chapter_classifier.joblib"
-TRANSFORMER_DIR = MODELS_DIR / "chapter_transformer"
 
 SPLIT_NAMES = ("train", "val", "test")
 TOP_CONFUSIONS = 8
+
+# The two approaches are called distinguishable only when every transformer
+# seed's paired test clears this, with the same model ahead each time.
+SIGNIFICANCE = 0.05
+
+# Approach 1 is also refit on this many fresh group-aware splits, to measure
+# how much the accuracy moves with which papers land in the test set. Ten is
+# enough to see the size of that movement and costs about twenty seconds.
+RESPLIT_SEEDS = tuple(range(1, 11))
 
 # Questions written for this repository rather than taken from any paper, so
 # the examples can be published. One per chapter family, and the last two are
@@ -76,10 +98,6 @@ EXAMPLE_QUESTIONS = [
 ]
 
 
-def content_hash(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-
-
 def dataset_fingerprint():
     """Row counts and a content hash, so a number can name the data it came from."""
     corpus = PRIVATE_DATA / "questions.jsonl"
@@ -92,7 +110,8 @@ def dataset_fingerprint():
             if line.strip():
                 per_chapter[json.loads(line)["chapter"]] += 1
     return {"counts": counts, "per_chapter": per_chapter,
-            "rows": sum(counts.values()), "hash": content_hash(corpus)}
+            "rows": sum(counts.values()), "hash": file_hash(corpus),
+            "test_hash": split_hash("test")}
 
 
 def approach_one_predictions():
@@ -101,47 +120,6 @@ def approach_one_predictions():
     predicted = chapter_classifier.predict(
         to_features(question_vectoriser, test_questions))
     return y_test, list(predicted)
-
-
-def model_predates_the_split(model_file):
-    """True when a saved model is older than the split it would be scored on.
-
-    A model that outlives its split scores far too well, because rows that were
-    its training data have since become test data. There is no way to see that
-    in the accuracy itself, so it is caught here on the timestamps instead and
-    the number is withheld rather than printed with a caveat nobody reads.
-    """
-    if not model_file.exists():
-        return True
-    split_file = PRIVATE_DATA / "test.jsonl"
-    return model_file.stat().st_mtime < split_file.stat().st_mtime
-
-
-def approach_two_predictions():
-    import torch
-    from torch.utils.data import DataLoader
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    from train_transformer import BATCH_SIZE, encode, id2label, pick_device
-
-    device = pick_device()
-    tokeniser = AutoTokenizer.from_pretrained(TRANSFORMER_DIR)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        TRANSFORMER_DIR).to(device)
-    test_questions, y_test = read_split("test")
-    dataset = encode(tokeniser, test_questions, y_test)
-
-    model.eval()
-    predicted = []
-    with torch.no_grad():
-        for input_ids, attention_mask, _ in DataLoader(dataset, batch_size=BATCH_SIZE):
-            outputs = model(input_ids=input_ids.to(device),
-                            attention_mask=attention_mask.to(device))
-            predicted.extend(outputs.logits.argmax(dim=-1).cpu().tolist())
-    return y_test, [id2label[index] for index in predicted]
-
-
-def accuracy(y_true, y_predicted):
-    return sum(t == p for t, p in zip(y_true, y_predicted)) / len(y_true)
 
 
 def confusion_counts(y_true, y_predicted):
@@ -214,6 +192,273 @@ def example_table():
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Formatting
+
+def pct(value):
+    return f"{value:.1%}"
+
+
+def interval_text(interval):
+    return f"{pct(interval[0])} to {pct(interval[1])}"
+
+
+def points(value, signed=False):
+    return f"{value * 100:+.1f} points" if signed else f"{value * 100:.1f} points"
+
+
+def duration(seconds):
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, rest = divmod(round(seconds), 60)
+    return f"{minutes} min {rest} s"
+
+
+def macro_f1(y_true, predicted):
+    return f1_score(y_true, predicted, average="macro", zero_division=0)
+
+
+# ---------------------------------------------------------------------------
+# The symmetric comparison
+
+def summarise_runs(y_true, runs):
+    """Mean, spread and interval for one approach's recorded seed runs.
+
+    The interval is a Wilson score interval on the mean number of correct
+    answers over the test rows. It measures the noise from which 246 questions
+    were drawn, which is a different noise from the seed spread and is reported
+    beside it rather than folded into it.
+    """
+    accuracies = [run.accuracy(y_true) for run in runs]
+    summary = spread(accuracies)
+    mean_correct = statistics.fmean(run.correct(y_true) for run in runs)
+    summary["interval"] = wilson_interval(mean_correct, len(y_true))
+    summary["macro_f1"] = statistics.fmean(macro_f1(y_true, run.predicted)
+                                           for run in runs)
+    summary["train_seconds"] = statistics.fmean(run.train_seconds for run in runs)
+    summary["hardware"] = sorted({run.hardware for run in runs})
+    summary["seeds"] = [run.seed for run in runs]
+    summary["parameters"] = runs[0].parameters
+    summary["features"] = runs[0].features
+    return summary
+
+
+def paired_comparisons(y_true, baseline_predicted, transformer_runs):
+    """Approach 1 against each transformer seed, on the same questions."""
+    rows = []
+    for run in transformer_runs:
+        both, only_one, only_two, neither = paired_outcomes(
+            y_true, baseline_predicted, run.predicted)
+        rows.append({
+            "seed": run.seed, "both": both, "only_one": only_one,
+            "only_two": only_two, "neither": neither,
+            "difference": (only_one - only_two) / len(y_true),
+            "interval": paired_difference_interval(only_one, only_two, len(y_true)),
+            "p": mcnemar_exact_p(only_one, only_two),
+        })
+    return rows
+
+
+def verdict(one, two, pairs):
+    """Decide what the numbers say, by a rule fixed before they were seen.
+
+    Distinguishable: every seed's paired test is below SIGNIFICANCE and the
+    same approach is ahead each time. Indistinguishable: no seed's is. Anything
+    in between is reported as mixed, with the counts, rather than rounded to
+    whichever story is tidier.
+    """
+    overlap = intervals_overlap(one["interval"], two["interval"])
+    significant = [row for row in pairs if row["p"] < SIGNIFICANCE]
+    leaders = {row["difference"] > 0 for row in significant}
+    p_values = [row["p"] for row in pairs]
+    p_range = (f"p = {min(p_values):.2f}" if len(pairs) == 1
+               else f"p between {min(p_values):.2f} and {max(p_values):.2f}")
+    overlap_text = ("the 95% intervals on the two accuracies overlap"
+                    if overlap else
+                    "the 95% intervals on the two accuracies do not overlap")
+
+    if not significant:
+        return "indistinguishable", (
+            f"**On accuracy, the two approaches are statistically "
+            f"indistinguishable on this test set.** {overlap_text.capitalize()}, "
+            f"and the paired test does not reach p < {SIGNIFICANCE} for any of "
+            f"the {len(pairs)} transformer seeds ({p_range}). The mean gap of "
+            f"{points(one['mean'] - two['mean'], signed=True)} in Approach 1's "
+            f"favour is inside the noise of a test set this size. "
+            f"What separates the two is cost, not correctness: Approach 1 "
+            f"trains in {duration(one['train_seconds'])} against "
+            f"{duration(two['train_seconds'])} for Approach 2, a factor of "
+            f"{two['train_seconds'] / one['train_seconds']:,.0f}, with "
+            f"{two['parameters'] / one['parameters']:,.0f} times fewer parameters."
+        )
+    if len(significant) == len(pairs) and len(leaders) == 1:
+        winner = "Approach 1" if leaders.pop() else "Approach 2"
+        return "distinguishable", (
+            f"**On accuracy, {winner} is ahead, and the evidence holds up.** "
+            f"The paired test is below p < {SIGNIFICANCE} for every one of the "
+            f"{len(pairs)} transformer seeds ({p_range}), and {overlap_text}. "
+            f"The mean gap is {points(abs(one['mean'] - two['mean']))}. "
+            f"Approach 1 still trains in {duration(one['train_seconds'])} "
+            f"against {duration(two['train_seconds'])} for Approach 2."
+        )
+    return "mixed", (
+        f"**The evidence on accuracy is mixed.** The paired test is below "
+        f"p < {SIGNIFICANCE} for {len(significant)} of the {len(pairs)} "
+        f"transformer seeds ({p_range}), and {overlap_text}. That is not "
+        f"enough to call either approach more accurate. What separates them "
+        f"is cost: Approach 1 trains in {duration(one['train_seconds'])} "
+        f"against {duration(two['train_seconds'])} for Approach 2."
+    )
+
+
+def resplit_summary():
+    """Approach 1 on fresh group-aware splits, to size the test-set noise."""
+    rows = read_rows(PRIVATE_DATA / "questions.jsonl")
+    results = [resplit_tfidf(rows, seed) for seed in RESPLIT_SEEDS]
+    summary = spread([correct / total for correct, total in results])
+    summary["test_rows"] = sorted({total for _, total in results})
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Sections
+
+def headline_section(y_true, one, two):
+    lines = [
+        "## Headline",
+        "",
+        f"Both approaches are measured the same way: {METHOD}. Each is run from "
+        f"scratch at seeds {', '.join(str(seed) for seed in DEFAULT_SEEDS[:-1])} "
+        f"and {DEFAULT_SEEDS[-1]} on the frozen split, and every cell below is "
+        f"the mean over those runs. The interval is a 95% Wilson score interval "
+        f"on the mean accuracy over {len(y_true)} test questions: it says how far "
+        f"the number could move with a different draw of test questions, which "
+        f"is a different question from the seed spread beneath it.",
+        "",
+        "| | Approach 1 | Approach 2 |",
+        "|---|---|---|",
+    ]
+
+    def parameter_text(summary):
+        if summary["features"]:
+            return (f"{summary['features']:,} features × {len(CHAPTER_SLUGS)} "
+                    f"chapters, {summary['parameters']:,} weights")
+        return f"{summary['parameters']:,}"
+
+    def row(label, one_text, two_text):
+        return f"| {label} | {one_text} | {two_text if two else 'not measurable'} |"
+
+    seeds = f"mean of {one['n']} seeds"
+    lines += [
+        row(f"Test accuracy, {seeds}", f"**{pct(one['mean'])}**",
+            two and pct(two["mean"])),
+        row("95% interval on that accuracy", interval_text(one["interval"]),
+            two and interval_text(two["interval"])),
+        row("Across seeds, lowest to highest",
+            f"{pct(one['low'])} to {pct(one['high'])}",
+            two and f"{pct(two['low'])} to {pct(two['high'])}"),
+        row("Standard deviation across seeds", points(one["stdev"]),
+            two and points(two["stdev"])),
+        row(f"Macro-F1, {seeds}", f"**{one['macro_f1']:.2f}**",
+            two and f"{two['macro_f1']:.2f}"),
+        row("Training time, mean per run", duration(one["train_seconds"]),
+            two and duration(two["train_seconds"])),
+        row("Parameters", parameter_text(one), two and parameter_text(two)),
+        f"| Test questions | {len(y_true)} | {len(y_true)} |",
+        "",
+    ]
+    hardware = [f"Approach 1 on {', '.join(one['hardware'])}"]
+    if two:
+        hardware.append(f"Approach 2 on {', '.join(two['hardware'])}")
+    lines.append(f"Timed on: {'; '.join(hardware)}.")
+    if two and {h.rsplit(', ', 1)[0] for h in one['hardware']} != \
+            {h.rsplit(', ', 1)[0] for h in two['hardware']}:
+        lines.append("")
+        lines.append("**The two timings were taken on different machines and "
+                     "are not comparable.**")
+    lines += [
+        "",
+        "Approach 1's spread across seeds is exactly zero because nothing in it "
+        "is random: the TF-IDF counts are fixed by the corpus and the solver "
+        "converges to the same weights every time. The three runs are recorded "
+        "rather than asserted, so that both columns are the same kind of number.",
+    ]
+    return lines
+
+
+def comparison_section(y_true, one, two, pairs):
+    if not two:
+        return [
+            "## Are they distinguishable on accuracy?",
+            "",
+            "Not measurable: the ledger holds no transformer runs against the "
+            "current test split, so there is nothing to pair Approach 1 with. "
+            "`python3 tools/compare_runs.py seeds --approach distilbert --record` "
+            "puts them back.",
+        ]
+    label, paragraph = verdict(one, two, pairs)
+    lines = [
+        "## Are they distinguishable on accuracy?",
+        "",
+        f"Both models answer the same {len(y_true)} questions, so the paired "
+        f"comparison is the one that counts: the questions both get right or "
+        f"both get wrong say nothing about the difference between them, and the "
+        f"evidence is entirely in the questions exactly one of them gets right. "
+        f"Approach 1 has one set of predictions (its seeds are identical), so it "
+        f"is paired against each transformer seed in turn. The test is McNemar's, "
+        f"exact rather than approximated because the counts are small.",
+        "",
+        "| Approach 2 seed | Both right | Only Approach 1 right | Only Approach 2 right | "
+        "Both wrong | Approach 1 minus Approach 2 | 95% interval on the difference | Exact p |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for row in pairs:
+        low, high = row["interval"]
+        lines.append(
+            f"| {row['seed']} | {row['both']} | {row['only_one']} | {row['only_two']} | "
+            f"{row['neither']} | {points(row['difference'], signed=True)} | "
+            f"{points(low, signed=True)} to {points(high, signed=True)} | "
+            f"{row['p']:.2f} |")
+    lines += [
+        "",
+        f"The rule was fixed before the numbers were seen: the two approaches are "
+        f"called distinguishable only when every seed's paired test is below "
+        f"p < {SIGNIFICANCE} with the same approach ahead each time, "
+        f"indistinguishable when none is, and mixed otherwise.",
+        "",
+        paragraph,
+    ]
+    return lines
+
+
+def resplit_section(one, resplits):
+    half_width = (one["interval"][1] - one["interval"][0]) / 2
+    test_rows = " or ".join(str(count) for count in resplits["test_rows"])
+    return [
+        "## How much the test set itself moves the number",
+        "",
+        f"The interval above is a formula. This is the same noise measured: "
+        f"Approach 1 refit from scratch on {resplits['n']} fresh group-aware "
+        f"splits of the corpus at seeds {RESPLIT_SEEDS[0]} to {RESPLIT_SEEDS[-1]}, "
+        f"papers kept whole and the same four checks run as `src/split.py` runs "
+        f"before it writes. The frozen split is untouched; these splits exist "
+        f"only in memory. Each has {test_rows} test questions.",
+        "",
+        "| | Approach 1 across resplits |",
+        "|---|---|",
+        f"| Mean accuracy | {pct(resplits['mean'])} |",
+        f"| Lowest to highest | {pct(resplits['low'])} to {pct(resplits['high'])} |",
+        f"| Standard deviation | {points(resplits['stdev'])} |",
+        f"| Half-width of the 95% interval above, for comparison | {points(half_width)} |",
+        "",
+        f"A different draw of test papers moves the accuracy by "
+        f"{points(resplits['stdev'])} on its own, before any model changes. "
+        f"Approach 2 is not re-run here: at {duration(one['train_seconds'])} a "
+        f"run Approach 1 can afford {resplits['n']} refits, and this section "
+        f"measures the test set rather than the models.",
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dated", default="",
@@ -230,13 +475,30 @@ def main():
                           "Approach 1 - TF-IDF and logistic regression",
                           DOCS_DIR / "confusion-approach-1.png")
 
+    one_runs = load_runs(APPROACH_ONE)
+    two_runs = load_runs(APPROACH_TWO)
+    if not one_runs:
+        raise SystemExit("the ledger holds no Approach 1 runs against the current "
+                         "test split; run python3 tools/compare_runs.py seeds "
+                         "--approach tfidf --record first")
+    one = summarise_runs(y_true, one_runs)
+    two = summarise_runs(y_true, two_runs) if two_runs else None
+    pairs = paired_comparisons(y_true, approach_one, two_runs)
+    resplits = resplit_summary()
+
+    committed_matches_ledger = all(run.predicted == list(approach_one)
+                                   for run in one_runs)
+
+    # The transformer's confusion matrix and tables come from its default-seed
+    # run, so they are one model's mistakes, like Approach 1's.
     approach_two = None
-    transformer_is_stale = model_predates_the_split(
-        TRANSFORMER_DIR / "model.safetensors")
-    if TRANSFORMER_DIR.is_dir() and not transformer_is_stale:
-        _, approach_two = approach_two_predictions()
+    if two_runs:
+        default_run = next((run for run in two_runs if run.seed == DEFAULT_SEEDS[0]),
+                           two_runs[0])
+        approach_two = default_run.predicted
+        two_seed = default_run.seed
         draw_confusion_matrix(confusion_counts(y_true, approach_two),
-                              "Approach 2 - fine-tuned DistilBERT",
+                              f"Approach 2 - fine-tuned DistilBERT, seed {two_seed}",
                               DOCS_DIR / "confusion-approach-2.png")
 
     one_confusions, one_singles, one_pairs = confusion_table(y_true, approach_one)
@@ -251,7 +513,9 @@ def main():
         "## The frozen dataset",
         "",
         f"`data/private/questions.jsonl`, {fingerprint['rows']} labelled rows, "
-        f"sha256 `{fingerprint['hash']}`.",
+        f"sha256 `{fingerprint['hash']}`. The test split it was scored on is "
+        f"`test.jsonl`, sha256 `{fingerprint['test_hash']}`; every run in the "
+        f"ledger carries that hash, and a run against any other split is ignored.",
         "",
         "| Split | Rows |",
         "|---|---|",
@@ -268,39 +532,33 @@ def main():
     for slug in CHAPTER_SLUGS:
         sections.append(f"| {CHAPTERS[slug]} | {fingerprint['per_chapter'][slug]} |")
 
-    sections += [
-        "",
-        "## Headline",
-        "",
-        "| | Approach 1 | Approach 2 |",
-        "|---|---|---|",
-    ]
-    two_accuracy = (f"{accuracy(y_true, approach_two):.1%}" if approach_two
-                    else "not measurable")
-    two_f1 = (f"{f1_score(y_true, approach_two, average='macro', zero_division=0):.2f}"
-              if approach_two else "not measurable")
-    sections += [
-        f"| Test accuracy | **{accuracy(y_true, approach_one):.1%}** | {two_accuracy} |",
-        f"| Macro-F1 | **{f1_score(y_true, approach_one, average='macro', zero_division=0):.2f}** "
-        f"| {two_f1} |",
-        f"| Test questions | {len(y_true)} | {len(y_true)} |",
-        "",
-        "Single runs at the default seed.",
-        "",
-        "## Confusion matrices",
-        "",
-    ]
-    if not approach_two:
-        sections += [
-            "The saved transformer is older than the split it would be scored "
-            "against, so its accuracy would be a training-set score wearing a "
-            "test set's name, and this report withholds it rather than print it "
-            "under a caveat nobody reads. Retraining it puts the number back. "
-            "The README's Approach 2 figure is a three-seed mean recorded when "
-            "the model and the split still matched.",
-            "",
-        ]
-    sections.append("![Approach 1 confusion matrix](docs/confusion-approach-1.png)")
+    sections += [""] + headline_section(y_true, one, two)
+    sections += [""] + comparison_section(y_true, one, two, pairs)
+    sections += [""] + resplit_section(one, resplits)
+
+    sections += ["", "## Confusion matrices", ""]
+    if committed_matches_ledger:
+        sections.append(
+            "Approach 1's matrix is drawn from the committed "
+            "`models/chapter_classifier.joblib`, whose predictions match the "
+            "three ledger runs exactly.")
+    else:
+        sections.append(
+            "**The committed `models/chapter_classifier.joblib` does not "
+            "reproduce the ledger runs' predictions.** It is stale against the "
+            "current split; `python3 src/train.py` refits it.")
+    sections.append("")
+    if approach_two:
+        sections.append(
+            f"Approach 2's is drawn from its seed {two_seed} run, so that both "
+            f"matrices show one model's mistakes.")
+    else:
+        sections.append(
+            "The ledger holds no transformer runs against the current test "
+            "split, so Approach 2's matrix is withheld rather than drawn from a "
+            "model that outlived its split. `python3 tools/compare_runs.py seeds "
+            "--approach distilbert --record` puts it back.")
+    sections += ["", "![Approach 1 confusion matrix](docs/confusion-approach-1.png)"]
     if approach_two:
         sections.append("")
         sections.append("![Approach 2 confusion matrix](docs/confusion-approach-2.png)")
@@ -311,13 +569,25 @@ def main():
         one_confusions,
         "",
         f"{one_pairs} distinct pairs in all, {one_singles} of them confused exactly once.",
+    ]
+    if approach_two:
+        two_confusions, two_singles, two_pairs = confusion_table(y_true, approach_two)
+        sections += [
+            "",
+            f"## What Approach 2 confuses, seed {two_seed}",
+            "",
+            two_confusions,
+            "",
+            f"{two_pairs} distinct pairs in all, {two_singles} of them confused exactly once.",
+        ]
+    sections += [
         "",
         "## Approach 1 per chapter",
         "",
         per_chapter_table(y_true, approach_one),
     ]
     if approach_two:
-        sections += ["", "## Approach 2 per chapter", "",
+        sections += ["", f"## Approach 2 per chapter, seed {two_seed}", "",
                      per_chapter_table(y_true, approach_two)]
     sections += [
         "",
