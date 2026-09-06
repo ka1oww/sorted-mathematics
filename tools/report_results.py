@@ -11,9 +11,12 @@ from-scratch seed runs under the same procedure on the same frozen split, so
 neither side is a single draw. Every accuracy carries a 95% interval, both
 models' predictions on the same 246 questions are put through an exact paired
 test, and the verdict paragraph is chosen by a rule fixed in this file, not
-typed after the numbers were seen. Approach 2 is included only if the ledger
-holds transformer runs against the current test split; without them the report
-covers Approach 1 and says so.
+typed after the numbers were seen. Both sides of that paired test are ledger
+runs, so both were scored against the split the hash names; the committed
+models/chapter_classifier.joblib supplies only Approach 1's pictures and tables,
+and the report says whether it still reproduces the ledger runs. Approach 2 is
+included only if the ledger holds transformer runs against the current test
+split; without them the report covers Approach 1 and says so.
 
 Run from the project root:  python3 tools/report_results.py
 The ledger is filled by:     python3 tools/compare_runs.py seeds --record
@@ -115,6 +118,11 @@ def dataset_fingerprint():
 
 
 def approach_one_predictions():
+    """The committed model's test predictions, for the matrices and tables only.
+
+    The headline, the paired test and the verdict all come from the ledger
+    instead; see main().
+    """
     question_vectoriser, chapter_classifier = joblib.load(CLASSIFIER_PATH)
     test_questions, y_test = read_split("test")
     predicted = chapter_classifier.predict(
@@ -221,6 +229,11 @@ def macro_f1(y_true, predicted):
 # ---------------------------------------------------------------------------
 # The symmetric comparison
 
+def default_seed_run(runs):
+    """The one run the tables and the pairing are drawn from, not a mean."""
+    return next((run for run in runs if run.seed == DEFAULT_SEEDS[0]), runs[0])
+
+
 def summarise_runs(y_true, runs):
     """Mean, spread and interval for one approach's recorded seed runs.
 
@@ -244,7 +257,11 @@ def summarise_runs(y_true, runs):
 
 
 def paired_comparisons(y_true, baseline_predicted, transformer_runs):
-    """Approach 1 against each transformer seed, on the same questions."""
+    """Approach 1 against each transformer seed, on the same questions.
+
+    baseline_predicted is a ledger run's predictions, so both sides of every
+    pair were scored against the split named by the same hash.
+    """
     rows = []
     for run in transformer_runs:
         both, only_one, only_two, neither = paired_outcomes(
@@ -257,6 +274,39 @@ def paired_comparisons(y_true, baseline_predicted, transformer_runs):
             "p": mcnemar_exact_p(only_one, only_two),
         })
     return rows
+
+
+def cheaper_first(one, two):
+    """The two approaches ordered by training time, with their names.
+
+    Which of them is the cheap one is a fact about the measurement, not
+    something to assume: the sentences below read off this rather than naming
+    Approach 1 and hoping.
+    """
+    if one["train_seconds"] <= two["train_seconds"]:
+        return ("Approach 1", one), ("Approach 2", two)
+    return ("Approach 2", two), ("Approach 1", one)
+
+
+def cost_sentence(one, two):
+    (cheap_name, cheap), (dear_name, dear) = cheaper_first(one, two)
+    return (f"{cheap_name} trains in {duration(cheap['train_seconds'])} "
+            f"against {duration(dear['train_seconds'])} for {dear_name}")
+
+
+def cost_and_size_sentence(one, two):
+    """The cost sentence, plus the parameter ratio attributed to the right side."""
+    (cheap_name, cheap), (_, dear) = cheaper_first(one, two)
+    factor = dear["train_seconds"] / cheap["train_seconds"]
+    if one["parameters"] <= two["parameters"]:
+        small_name, small, big = "Approach 1", one, two
+    else:
+        small_name, small, big = "Approach 2", two, one
+    ratio = big["parameters"] / small["parameters"]
+    size = (f", with {ratio:,.0f} times fewer parameters."
+            if small is cheap else
+            f". {small_name} carries {ratio:,.0f} times fewer parameters.")
+    return f"{cost_sentence(one, two)}, a factor of {factor:,.0f}{size}"
 
 
 def verdict(one, two, pairs):
@@ -276,6 +326,8 @@ def verdict(one, two, pairs):
     overlap_text = ("the 95% intervals on the two accuracies overlap"
                     if overlap else
                     "the 95% intervals on the two accuracies do not overlap")
+    gap = one["mean"] - two["mean"]
+    ahead = "Approach 1" if gap >= 0 else "Approach 2"
 
     if not significant:
         return "indistinguishable", (
@@ -283,13 +335,10 @@ def verdict(one, two, pairs):
             f"indistinguishable on this test set.** {overlap_text.capitalize()}, "
             f"and the paired test does not reach p < {SIGNIFICANCE} for any of "
             f"the {len(pairs)} transformer seeds ({p_range}). The mean gap of "
-            f"{points(one['mean'] - two['mean'], signed=True)} in Approach 1's "
+            f"{points(abs(gap), signed=True)} in {ahead}'s "
             f"favour is inside the noise of a test set this size. "
-            f"What separates the two is cost, not correctness: Approach 1 "
-            f"trains in {duration(one['train_seconds'])} against "
-            f"{duration(two['train_seconds'])} for Approach 2, a factor of "
-            f"{two['train_seconds'] / one['train_seconds']:,.0f}, with "
-            f"{two['parameters'] / one['parameters']:,.0f} times fewer parameters."
+            f"What separates the two is cost, not correctness: "
+            f"{cost_and_size_sentence(one, two)}"
         )
     if len(significant) == len(pairs) and len(leaders) == 1:
         winner = "Approach 1" if leaders.pop() else "Approach 2"
@@ -297,17 +346,15 @@ def verdict(one, two, pairs):
             f"**On accuracy, {winner} is ahead, and the evidence holds up.** "
             f"The paired test is below p < {SIGNIFICANCE} for every one of the "
             f"{len(pairs)} transformer seeds ({p_range}), and {overlap_text}. "
-            f"The mean gap is {points(abs(one['mean'] - two['mean']))}. "
-            f"Approach 1 still trains in {duration(one['train_seconds'])} "
-            f"against {duration(two['train_seconds'])} for Approach 2."
+            f"The mean gap is {points(abs(gap))}. "
+            f"Even so, {cost_sentence(one, two)}."
         )
     return "mixed", (
         f"**The evidence on accuracy is mixed.** The paired test is below "
         f"p < {SIGNIFICANCE} for {len(significant)} of the {len(pairs)} "
         f"transformer seeds ({p_range}), and {overlap_text}. That is not "
         f"enough to call either approach more accurate. What separates them "
-        f"is cost: Approach 1 trains in {duration(one['train_seconds'])} "
-        f"against {duration(two['train_seconds'])} for Approach 2."
+        f"is cost: {cost_sentence(one, two)}."
     )
 
 
@@ -323,14 +370,35 @@ def resplit_summary():
 # ---------------------------------------------------------------------------
 # Sections
 
+def seed_list(seeds):
+    seeds = [str(seed) for seed in seeds]
+    if len(seeds) == 1:
+        return seeds[0]
+    return f"{', '.join(seeds[:-1])} and {seeds[-1]}"
+
+
+def seeds_sentence(one, two):
+    """Name the seeds the ledger actually holds, not the ones it was asked for.
+
+    An interrupted recording run leaves fewer, and a paragraph claiming three
+    above a table headed "mean of 2 seeds" is the kind of small untruth this
+    report exists to avoid.
+    """
+    if two is None or one["seeds"] == two["seeds"]:
+        return (f"Each is run from scratch at seeds {seed_list(one['seeds'])} on "
+                f"the frozen split, and every cell below is the mean over those "
+                f"runs.")
+    return (f"Approach 1 is run from scratch at seeds {seed_list(one['seeds'])} "
+            f"and Approach 2 at seeds {seed_list(two['seeds'])} on the frozen "
+            f"split, and every cell below is the mean over those runs.")
+
+
 def headline_section(y_true, one, two):
     lines = [
         "## Headline",
         "",
-        f"Both approaches are measured the same way: {METHOD}. Each is run from "
-        f"scratch at seeds {', '.join(str(seed) for seed in DEFAULT_SEEDS[:-1])} "
-        f"and {DEFAULT_SEEDS[-1]} on the frozen split, and every cell below is "
-        f"the mean over those runs. The interval is a 95% Wilson score interval "
+        f"Both approaches are measured the same way: {METHOD}. "
+        f"{seeds_sentence(one, two)} The interval is a 95% Wilson score interval "
         f"on the mean accuracy over {len(y_true)} test questions: it says how far "
         f"the number could move with a different draw of test questions, which "
         f"is a different question from the seed spread beneath it.",
@@ -348,7 +416,8 @@ def headline_section(y_true, one, two):
     def row(label, one_text, two_text):
         return f"| {label} | {one_text} | {two_text if two else 'not measurable'} |"
 
-    seeds = f"mean of {one['n']} seeds"
+    seeds = (f"mean of {one['n']} seeds"
+             if two is None or one["n"] == two["n"] else "mean across seeds")
     lines += [
         row(f"Test accuracy, {seeds}", f"**{pct(one['mean'])}**",
             two and pct(two["mean"])),
@@ -386,7 +455,7 @@ def headline_section(y_true, one, two):
     return lines
 
 
-def comparison_section(y_true, one, two, pairs):
+def comparison_section(y_true, one, two, pairs, one_seeds_agree=True):
     if not two:
         return [
             "## Are they distinguishable on accuracy?",
@@ -397,6 +466,12 @@ def comparison_section(y_true, one, two, pairs):
             "puts them back.",
         ]
     label, paragraph = verdict(one, two, pairs)
+    pairing = ("Approach 1 has one set of predictions (its seeds are "
+               "identical), so it is paired against each transformer seed in "
+               "turn." if one_seeds_agree else
+               f"Approach 1's seed runs do not agree, so its seed "
+               f"{one['seeds'][0]} run is the one paired against each "
+               f"transformer seed in turn.")
     lines = [
         "## Are they distinguishable on accuracy?",
         "",
@@ -404,8 +479,7 @@ def comparison_section(y_true, one, two, pairs):
         f"comparison is the one that counts: the questions both get right or "
         f"both get wrong say nothing about the difference between them, and the "
         f"evidence is entirely in the questions exactly one of them gets right. "
-        f"Approach 1 has one set of predictions (its seeds are identical), so it "
-        f"is paired against each transformer seed in turn. The test is McNemar's, "
+        f"{pairing} The test is McNemar's, "
         f"exact rather than approximated because the counts are small.",
         "",
         "| Approach 2 seed | Both right | Only Approach 1 right | Only Approach 2 right | "
@@ -483,7 +557,16 @@ def main():
                          "--approach tfidf --record first")
     one = summarise_runs(y_true, one_runs)
     two = summarise_runs(y_true, two_runs) if two_runs else None
-    pairs = paired_comparisons(y_true, approach_one, two_runs)
+
+    # Both halves of the paired comparison come from the ledger, whose records
+    # are hash-bound to this test split. The committed joblib is not: it can
+    # outlive a resplit, and pairing against it would let a model that had
+    # memorised today's test rows produce the verdict, which is exactly the leak
+    # the hash guard exists to stop.
+    one_default = default_seed_run(one_runs)
+    one_predicted = one_default.predicted
+    one_seeds_agree = all(run.predicted == one_predicted for run in one_runs)
+    pairs = paired_comparisons(y_true, one_predicted, two_runs)
     resplits = resplit_summary()
 
     committed_matches_ledger = all(run.predicted == list(approach_one)
@@ -493,8 +576,7 @@ def main():
     # run, so they are one model's mistakes, like Approach 1's.
     approach_two = None
     if two_runs:
-        default_run = next((run for run in two_runs if run.seed == DEFAULT_SEEDS[0]),
-                           two_runs[0])
+        default_run = default_seed_run(two_runs)
         approach_two = default_run.predicted
         two_seed = default_run.seed
         draw_confusion_matrix(confusion_counts(y_true, approach_two),
@@ -533,7 +615,8 @@ def main():
         sections.append(f"| {CHAPTERS[slug]} | {fingerprint['per_chapter'][slug]} |")
 
     sections += [""] + headline_section(y_true, one, two)
-    sections += [""] + comparison_section(y_true, one, two, pairs)
+    sections += [""] + comparison_section(y_true, one, two, pairs,
+                                          one_seeds_agree)
     sections += [""] + resplit_section(one, resplits)
 
     sections += ["", "## Confusion matrices", ""]
