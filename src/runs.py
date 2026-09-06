@@ -6,7 +6,7 @@ training plus validation, score the sealed test rows), repeated over the same
 seeds, timed on the same machine. This module is the one definition of that
 run, so tools/compare_runs.py and tools/report_results.py cannot drift apart.
 
-A transformer run costs about eleven minutes, so runs are written to a ledger
+A transformer run costs about fifteen minutes, so runs are written to a ledger
 under data/private/runs/ (gitignored, like everything else in data/private).
 Each record carries the sha256 of the test split it was scored against, and
 the reader ignores any record whose hash is not the current split's. That is

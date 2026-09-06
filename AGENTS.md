@@ -21,7 +21,7 @@ the project is and DATA-PLAN.md is the data contract; neither is repeated here.
   split are ignored. So a "not measurable" row in RESULTS.md means the ledger
   has no runs for the current split, and
   `python3 tools/compare_runs.py seeds --record` is what puts them back
-  (about eleven minutes per transformer seed on an M3 Pro).
+  (about fifteen minutes per transformer seed on an M3 Pro).
 - **The comparison is only symmetric while both approaches go through the
   ledger.** Both headline numbers are means over the same three seeds under the
   same procedure, timed on the same machine, and RESULTS.md's verdict paragraph
