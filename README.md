@@ -19,8 +19,13 @@ That is a real prelim question with the values changed, from a paper the model
 was never trained on. The percentages sit low because the chosen TF-IDF and
 regularisation setup keeps the weights small across all 21 chapters.
 
-**93.1% accuracy** across all 21 chapters, or 229 of the 246 questions held back
-from training.
+**A word counter matches a fine-tuned transformer here, at a fraction of the
+cost.** TF-IDF and logistic regression scores 93.1% on the 246 questions held
+back from training; a fine-tuned DistilBERT scores 90.8% on the same
+questions, and a paired test cannot tell the two apart. The word counter trains
+in 1.6 seconds against 15 minutes for the transformer, with 10,884 features
+against 67 million parameters, and it can show you the words behind every
+decision.
 
 ## Running it
 
@@ -81,7 +86,8 @@ tutorial for questions with no context.
 Count which words appear in a question, weight the rare ones higher, learn one
 set of word weights per chapter.
 
-**93.1% on the test set, macro-F1 0.94. Trains in 2.5 seconds.**
+**93.1% on the test set, 95% interval 89.2% to 95.6%, macro-F1 0.94. Trains in
+1.6 seconds.**
 
 Regularisation is tuned on the validation split, then the model is refit on
 training plus validation. `class_weight="balanced"` stops the model from ignoring
@@ -95,13 +101,17 @@ English. It reads a sentence in order rather than as a bag of words, so "the
 line meets the plane" and "the plane meets the line" are two different sentences
 to it, while they are identical to Approach 1.
 
-**91.2% on the test set averaged over three seeds, macro-F1 0.91.**
+**90.8% on the test set averaged over three seeds, 95% interval 86.5% to 93.8%,
+macro-F1 0.91. Trains in 15 minutes.**
 
 The loss was unweighted while Approach 1 used balanced class weights. Weighting
-it is worth 0.8 points, 91.5% to 92.3% at seed 42. The tokeniser truncated at
+it was worth 0.8 points, 91.5% to 92.3% at seed 42. The tokeniser truncated at
 256 tokens while TF-IDF read every word: 84 of the 1,451 questions run past 256,
 and the longest loses more than half of itself. The limit is now 512, worth
-another 1.6 points. Both numbers come from `tools/compare_runs.py`.
+another 1.6 points. Both deltas come from `tools/compare_runs.py`, and both are
+differences between single runs, so they are inside the same noise as the gap
+between the two approaches: they were fixed because they made the comparison
+fair, not because the numbers proved them.
 
 The epoch count is chosen on validation, then the model is retrained from
 scratch on training plus validation. Validation accuracy is still climbing at
@@ -113,15 +123,27 @@ Approach 1, judged on what matters here.
 
 | | Approach 1 | Approach 2 |
 |---|---|---|
-| Test accuracy, mean of 3 seeds | **93.1%** | 91.2% |
-| Spread across those seeds | 0.0 points | 1.6 points |
-| Macro-F1 | **0.94** | 0.91 |
-| Training time | 2.5 seconds | ~12 minutes |
-| Parameters | 9,351 features × 21 | 66,000,000 |
-| Explains itself | yes | no |
+| Test accuracy, mean of 3 seeds | 93.1% | 90.8% |
+| 95% interval on that accuracy | 89.2% to 95.6% | 86.5% to 93.8% |
+| Standard deviation across seeds | 0.0 points | 0.9 points |
+| Macro-F1 | 0.94 | 0.91 |
+| Training time, Apple M3 Pro | **1.6 seconds** | 15 min 22 s |
+| Parameters | **10,884 features × 21** | 66,969,621 |
+| Explains itself | **yes** | no |
 
-The word counter is more accurate, and it got there in two and a half seconds
-against about twelve minutes.
+On accuracy the two are statistically indistinguishable. A test set of 246
+questions puts about three points of noise on any accuracy measured against
+it, the two intervals overlap, and the paired test on the questions exactly
+one model got right gives p between 0.17 and 0.65 across the three transformer
+seeds. The 2.3-point gap is real on this test set and would not be surprising
+on the next one in either direction. Both models were measured the same way: trained
+from scratch at seeds 42, 43 and 44 on the frozen split, tuned on validation,
+refit on training plus validation, scored on the sealed test rows, timed on the
+same machine. [RESULTS.md](RESULTS.md) has the paired counts, the intervals and
+the rule that chose the verdict.
+
+What separates them is cost. Approach 1 trained nearly 600 times faster with
+nearly 300 times fewer parameters, and it reached the same place.
 
 The training data did not justify the 66 million parameters. The signal for which
 chapter a question belongs to is mostly vocabulary: "argand", "significance
@@ -130,16 +152,17 @@ Vectors. Finding the words that decide a label is precisely what TF-IDF is built
 to do. A transformer's advantage is understanding word order and context, and
 there is very little in this problem that needs it.
 
-Approach 1's row regenerates from `models/chapter_classifier.joblib`, which is
-committed. Approach 2's does not. The saved transformer is 268 MB, is not
-committed, and the copy on my machine is older than the current split, so that
-row can only be reproduced by retraining. The figures above are from when the
-model and the split matched.
+Both rows regenerate from the run ledger in `data/private/runs/`, which
+`tools/compare_runs.py seeds --record` fills and `tools/report_results.py`
+reads. Every record carries the hash of the test split it was scored on, so a
+model that outlives its split cannot put a training-set score into the table.
+The transformer itself is 268 MB and is not committed; Approach 1's model is,
+and its predictions match its ledger runs exactly.
 
 ## What each model gets wrong
 
-The two models are separated by accuracy, but they are separated much more
-interestingly by what they fail on.
+The two models are not separated by accuracy. They are separated by what they
+fail on.
 
 ![Approach 1 confusion matrix](docs/confusion-approach-1.png)
 
@@ -153,7 +176,7 @@ Approach 1 confuses my own boundaries:
 
 The mistakes come from me splitting the line between two very similar chapters.
 
-Approach 2 makes the same mistake, more often:
+Approach 2 makes the same mistake, more often. Its seed 42 run:
 
 | | |
 |---|---|
@@ -163,7 +186,9 @@ Approach 2 makes the same mistake, more often:
 | Sequences and Series called APGP | 2 times |
 | Nine other pairs, noise | once each |
 
-The same boundary trips both models. It trips DistilBERT nearly twice as often.
+![Approach 2 confusion matrix](docs/confusion-approach-2.png)
+
+The same boundary trips both models.
 
 ## Checking what it learned
 
@@ -195,11 +220,15 @@ src/train.py               Approach 1
 src/evaluate.py            Approach 1 measurement
 src/train_transformer.py   Approach 2
 src/evaluate_transformer.py  Approach 2 measurement, same report shape
+src/runs.py                one from-scratch run of either approach, and the ledger
+src/intervals.py           confidence intervals and the paired test, pure Python
 src/predict.py             the command-line demo
 src/chapters.py            the 21 chapters
 src/paths.py               where things live, and the one write guard
 tests/test_split.py        33 tests, mostly about leakage
 tests/test_merge.py        2 tests, about deduplication
+tests/test_intervals.py    22 tests, about the statistics
 tools/                     one-off measurements, not part of the pipeline
-tools/report_results.py    writes RESULTS.md and the confusion matrix
+tools/compare_runs.py      the seed runs both approaches are measured by
+tools/report_results.py    writes RESULTS.md and the confusion matrices
 ```

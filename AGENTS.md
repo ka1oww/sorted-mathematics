@@ -15,9 +15,18 @@ the project is and DATA-PLAN.md is the data contract; neither is repeated here.
   classifier trained on an earlier split scores far too well on a later one,
   because rows that were training data have become test data. Retrain after any
   change to `src/split.py`, its seed, or the corpus.
-  `tools/report_results.py` refuses to score a model file older than
-  `data/private/test.jsonl` for this reason, so a "not measurable" row in
-  RESULTS.md means a stale artefact rather than a missing one.
+  `tools/report_results.py` reads both approaches from the run ledger in
+  `data/private/runs/` (see `src/runs.py`), and every record carries the
+  sha256 of the `test.jsonl` it was scored against; records against any other
+  split are ignored. So a "not measurable" row in RESULTS.md means the ledger
+  has no runs for the current split, and
+  `python3 tools/compare_runs.py seeds --record` is what puts them back
+  (about fifteen minutes per transformer seed on an M3 Pro).
+- **The comparison is only symmetric while both approaches go through the
+  ledger.** Both headline numbers are means over the same three seeds under the
+  same procedure, timed on the same machine, and RESULTS.md's verdict paragraph
+  is chosen by a fixed rule in `tools/report_results.py`. Do not paste a number
+  measured any other way beside them.
 - `tools/measure_grouping_key_impact.py` needs `data/private/school_aliases.json`
   to report the school residual. Absent, that section is a no-op rather than an
   error, so a zero there can mean "no alias map" rather than "no residual".
@@ -30,3 +39,10 @@ the project is and DATA-PLAN.md is the data contract; neither is repeated here.
   own explicit insert. Do not add per-file `sys.path` blocks.
 - Every writer goes through `assert_inside_project` in `src/paths.py`, and the
   two source roots are overridable with `EMBER_SOURCE_ROOT` and `TRIPLEMATH_PDF`.
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
