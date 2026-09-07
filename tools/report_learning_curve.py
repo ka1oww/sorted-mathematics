@@ -22,27 +22,44 @@ The ledger is filled by:     python3 tools/learning_curve.py --record
 import argparse
 import statistics
 import sys
+from itertools import pairwise
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
-from features import read_split  # noqa: E402
-from intervals import mcnemar_exact_p, paired_difference_interval, paired_outcomes  # noqa: E402
-from paths import assert_inside_project  # noqa: E402
-from report_results import (SIGNIFICANCE, dataset_fingerprint, duration,  # noqa: E402
-                            interval_text, pct, points, seed_list,
-                            summarise_runs)
-from runs import (APPROACH_NAMES, APPROACH_ONE, APPROACH_TWO, METHOD,  # noqa: E402
-                  load_runs)
+from report_results import (
+    SIGNIFICANCE,
+    dataset_fingerprint,
+    duration,
+    interval_text,
+    pct,
+    points,
+    seed_list,
+    summarise_runs,
+)
 
-from learning_curve import FULL  # noqa: E402  (src/, via the insert above)
+from features import read_split
+from intervals import (
+    mcnemar_exact_p,
+    paired_difference_interval,
+    paired_outcomes,
+)
+from learning_curve import FULL
+from paths import assert_inside_project
+from runs import (
+    APPROACH_NAMES,
+    APPROACH_ONE,
+    APPROACH_TWO,
+    METHOD,
+    load_runs,
+)
 
 CURVE_PATH = PROJECT_ROOT / "LEARNING-CURVE.md"
 DOCS_DIR = PROJECT_ROOT / "docs"
@@ -60,13 +77,16 @@ NEGLIGIBLE_GAIN = 0.005
 # more than the data size does, so the train-time column below is a record of
 # what each run cost on the day and not a measurement of how training scales.
 # It changes no accuracy: nice level and thread count move speed, not weights.
-TIMING_CAVEAT = ("Train time is wall-clock on a laptop that was in use between "
-                 "runs, so it reflects contention as much as data size and is "
-                 "not a measurement of how training scales.")
+TIMING_CAVEAT = (
+    "Train time is wall-clock on a laptop that was in use between "
+    "runs, so it reflects contention as much as data size and is "
+    "not a measurement of how training scales."
+)
 
 
 # ---------------------------------------------------------------------------
 # Reading the ledger
+
 
 def curve_points(approach, y_true, fractions=FRACTIONS):
     """One summary per fraction the ledger holds runs for, in order."""
@@ -77,26 +97,28 @@ def curve_points(approach, y_true, fractions=FRACTIONS):
             continue
         summary = summarise_runs(y_true, runs)
         summary["fraction"] = fraction
-        summary["train_rows"] = statistics.fmean(run.rows_trained_on()
-                                                 for run in runs)
+        summary["train_rows"] = statistics.fmean(run.rows_trained_on() for run in runs)
         summary["runs"] = {run.seed: run for run in runs}
         measured.append(summary)
     return measured
 
 
 def missing_fractions(approach, fractions=FRACTIONS):
-    return [fraction for fraction in fractions
-            if not load_runs(approach, fraction=fraction)]
+    return [
+        fraction for fraction in fractions if not load_runs(approach, fraction=fraction)
+    ]
 
 
 # ---------------------------------------------------------------------------
 # The shape of a curve
 
+
 def increments(measured):
     """The gain in accuracy from each point to the next."""
-    return [(earlier["fraction"], later["fraction"],
-             later["mean"] - earlier["mean"])
-            for earlier, later in zip(measured, measured[1:])]
+    return [
+        (earlier["fraction"], later["fraction"], later["mean"] - earlier["mean"])
+        for earlier, later in pairwise(measured)
+    ]
 
 
 def paired_last_step(y_true, measured):
@@ -114,16 +136,21 @@ def paired_last_step(y_true, measured):
     for seed in sorted(set(earlier["runs"]) & set(later["runs"])):
         before = earlier["runs"][seed].predicted
         after = later["runs"][seed].predicted
-        both, only_before, only_after, neither = paired_outcomes(
-            y_true, before, after)
-        rows.append({
-            "seed": seed, "both": both, "only_before": only_before,
-            "only_after": only_after, "neither": neither,
-            "difference": (only_after - only_before) / len(y_true),
-            "interval": paired_difference_interval(only_after, only_before,
-                                                   len(y_true)),
-            "p": mcnemar_exact_p(only_after, only_before),
-        })
+        both, only_before, only_after, neither = paired_outcomes(y_true, before, after)
+        rows.append(
+            {
+                "seed": seed,
+                "both": both,
+                "only_before": only_before,
+                "only_after": only_after,
+                "neither": neither,
+                "difference": (only_after - only_before) / len(y_true),
+                "interval": paired_difference_interval(
+                    only_after, only_before, len(y_true)
+                ),
+                "p": mcnemar_exact_p(only_after, only_before),
+            }
+        )
     return rows
 
 
@@ -139,7 +166,8 @@ def seed_coverage(measured):
         f"{point['fraction']:.0%}: {len(point['seeds'])} "
         f"{'run' if len(point['seeds']) == 1 else 'runs'} at seeds "
         f"{names(point['seeds'])}"
-        for point in measured)
+        for point in measured
+    )
 
 
 def shape(measured, pairs):
@@ -154,41 +182,54 @@ def shape(measured, pairs):
         return "incomplete", (
             "**The shape of this curve is not measurable yet.** The ledger "
             "holds one point against the current test split, and a shape needs "
-            "at least two.")
+            "at least two."
+        )
     if not seed_sets_match(measured):
         last_seeds = set(measured[-2]["runs"]) & set(measured[-1]["runs"])
         if not last_seeds:
-            reason = ("The last two measured points have no common seed, so "
-                      "their paired comparison cannot be made.")
+            reason = (
+                "The last two measured points have no common seed, so "
+                "their paired comparison cannot be made."
+            )
         else:
-            reason = ("The measured points do not use one common seed set, so "
-                      "their shape comparison would be incomplete.")
+            reason = (
+                "The measured points do not use one common seed set, so "
+                "their shape comparison would be incomplete."
+            )
         return "incomplete", (
             f"**The shape of this curve is not measurable yet.** {reason} "
-            f"Seed coverage is {seed_coverage(measured)}.")
+            f"Seed coverage is {seed_coverage(measured)}."
+        )
     if not pairs:
         return "incomplete", (
             "**The shape of this curve is not measurable yet.** The last two "
             "measured points have no common seed, so their paired comparison "
-            "cannot be made.")
+            "cannot be made."
+        )
     first, last = measured[0], measured[-1]
     total_gain = last["mean"] - first["mean"]
     step = last["mean"] - measured[-2]["mean"]
     span = f"{first['fraction']:.0%} to {last['fraction']:.0%}"
     last_step = f"{measured[-2]['fraction']:.0%} to {last['fraction']:.0%}"
     p_values = [row["p"] for row in pairs]
-    p_range = (f"p = {min(p_values):.2f}" if len(pairs) == 1
-               else f"p between {min(p_values):.2f} and {max(p_values):.2f}")
+    p_range = (
+        f"p = {min(p_values):.2f}"
+        if len(pairs) == 1
+        else f"p between {min(p_values):.2f} and {max(p_values):.2f}"
+    )
     significant = [row for row in pairs if row["p"] < SIGNIFICANCE]
     climbing = {row["difference"] > 0 for row in significant}
-    growth = (f"Accuracy rises {points(total_gain, signed=True)} across {span}, "
-              f"and the last step, {last_step}, is "
-              f"{points(step, signed=True)}.")
+    growth = (
+        f"Accuracy rises {points(total_gain, signed=True)} across {span}, "
+        f"and the last step, {last_step}, is "
+        f"{points(step, signed=True)}."
+    )
 
     if abs(total_gain) < NEGLIGIBLE_GAIN:
         return "flat", (
             f"**The curve is flat: more data is not the binding constraint "
-            f"here.** {growth} Nothing in the range measured moves the accuracy.")
+            f"here.** {growth} Nothing in the range measured moves the accuracy."
+        )
     if not significant:
         return "flattened", (
             f"**The curve has flattened: more data is not the binding "
@@ -196,7 +237,8 @@ def shape(measured, pairs):
             f"reach p < {SIGNIFICANCE} for any of the {len(pairs)} seeds "
             f"({p_range}), so the last quarter of the training pool bought "
             f"nothing measurable, and a further quarter would be expected to "
-            f"buy no more.")
+            f"buy no more."
+        )
     if len(significant) == len(pairs) and len(climbing) == 1:
         if climbing.pop():
             return "climbing", (
@@ -204,89 +246,114 @@ def shape(measured, pairs):
                 f"data would help.** {growth} The paired test on that last step "
                 f"is below p < {SIGNIFICANCE} for every one of the {len(pairs)} "
                 f"seeds ({p_range}), so the last quarter of the training pool "
-                f"was still buying accuracy when the corpus ran out.")
+                f"was still buying accuracy when the corpus ran out."
+            )
         return "falling", (
             f"**The curve turns down at the last point.** {growth} The paired "
             f"test is below p < {SIGNIFICANCE} for every one of the "
             f"{len(pairs)} seeds ({p_range}) with the smaller training pool "
             f"ahead, which is a result about this corpus rather than about how "
-            f"much data the approach needs.")
+            f"much data the approach needs."
+        )
     return "mixed", (
         f"**The evidence at the last point is mixed.** {growth} The paired test "
         f"is below p < {SIGNIFICANCE} for {len(significant)} of the "
         f"{len(pairs)} seeds ({p_range}), which is not enough to say the curve "
-        f"is still climbing or that it has flattened.")
+        f"is still climbing or that it has flattened."
+    )
 
 
 def curves_differ(one, two):
     """Whether the two approaches' curves have the same shape, and how they differ."""
     if not seed_sets_match(one) or not seed_sets_match(two):
-        return ("The comparison of the two curves is incomplete because the "
-                "measured points do not use one common set of seeds at every "
-                "fraction.")
+        return (
+            "The comparison of the two curves is incomplete because the "
+            "measured points do not use one common set of seeds at every "
+            "fraction."
+        )
     if frozenset(one[0]["runs"]) != frozenset(two[0]["runs"]):
-        return ("The comparison of the two curves is incomplete because the "
-                "approaches were not measured at the same seeds at every "
-                "fraction.")
+        return (
+            "The comparison of the two curves is incomplete because the "
+            "approaches were not measured at the same seeds at every "
+            "fraction."
+        )
     one_gain = one[-1]["mean"] - one[0]["mean"]
     two_gain = two[-1]["mean"] - two[0]["mean"]
     difference = two_gain - one_gain
-    steeper = (APPROACH_NAMES[APPROACH_TWO] if difference > 0
-               else APPROACH_NAMES[APPROACH_ONE])
+    steeper = (
+        APPROACH_NAMES[APPROACH_TWO] if difference > 0 else APPROACH_NAMES[APPROACH_ONE]
+    )
     if abs(difference) < NEGLIGIBLE_GAIN:
-        return (f"The two curves climb by the same amount over the range "
-                f"measured: {points(one_gain, signed=True)} for Approach 1 "
-                f"against {points(two_gain, signed=True)} for Approach 2. "
-                f"Neither approach is the one waiting on more data.")
+        return (
+            f"The two curves climb by the same amount over the range "
+            f"measured: {points(one_gain, signed=True)} for Approach 1 "
+            f"against {points(two_gain, signed=True)} for Approach 2. "
+            f"Neither approach is the one waiting on more data."
+        )
     seed_count = {1: "one", 2: "two", 3: "three"}.get(
-        len(one[0]["seeds"]), str(len(one[0]["seeds"])))
-    return (f"The two curves are not the same shape. Over the range measured "
-            f"Approach 1 gains {points(one_gain, signed=True)} and Approach 2 "
-            f"{points(two_gain, signed=True)}, so {steeper} is the one that "
-            f"benefits more from data, by {points(abs(difference))}. That "
-            f"comparison is between two means of {seed_count} seeds each on 246 test "
-            f"questions, so it is a difference in slope worth naming rather "
-            f"than a precise measurement of one.")
+        len(one[0]["seeds"]), str(len(one[0]["seeds"]))
+    )
+    return (
+        f"The two curves are not the same shape. Over the range measured "
+        f"Approach 1 gains {points(one_gain, signed=True)} and Approach 2 "
+        f"{points(two_gain, signed=True)}, so {steeper} is the one that "
+        f"benefits more from data, by {points(abs(difference))}. That "
+        f"comparison is between two means of {seed_count} seeds each on 246 test "
+        f"questions, so it is a difference in slope worth naming rather "
+        f"than a precise measurement of one."
+    )
 
 
 # ---------------------------------------------------------------------------
 # Output
 
+
 def curve_table(measured):
-    lines = ["| Training pool | Rows trained on | Mean test accuracy | "
-             "Lowest to highest | 95% interval | Macro-F1 | Train time |",
-             "|---|---|---|---|---|---|---|"]
+    lines = [
+        (
+            "| Training pool | Rows trained on | Mean test accuracy | "
+            "Lowest to highest | 95% interval | Macro-F1 | Train time |"
+        ),
+        "|---|---|---|---|---|---|---|",
+    ]
     for point in measured:
         lines.append(
             f"| {point['fraction']:.0%} | {point['train_rows']:,.0f} | "
             f"**{pct(point['mean'])}** | {pct(point['low'])} to "
             f"{pct(point['high'])} | {interval_text(point['interval'])} | "
-            f"{point['macro_f1']:.2f} | {duration(point['train_seconds'])} |")
+            f"{point['macro_f1']:.2f} | {duration(point['train_seconds'])} |"
+        )
     return "\n".join(lines)
 
 
 def increment_table(measured):
     lines = ["| Step | Rows added | Accuracy gained |", "|---|---|---|"]
-    for earlier, later in zip(measured, measured[1:]):
+    for earlier, later in pairwise(measured):
         lines.append(
             f"| {earlier['fraction']:.0%} to {later['fraction']:.0%} | "
             f"{later['train_rows'] - earlier['train_rows']:,.0f} | "
-            f"{points(later['mean'] - earlier['mean'], signed=True)} |")
+            f"{points(later['mean'] - earlier['mean'], signed=True)} |"
+        )
     return "\n".join(lines)
 
 
 def paired_table(pairs):
-    lines = ["| Seed | Both right | Only the smaller pool right | "
-             "Only the full pool right | Both wrong | Difference | "
-             "95% interval on the difference | Exact p |",
-             "|---|---|---|---|---|---|---|---|"]
+    lines = [
+        (
+            "| Seed | Both right | Only the smaller pool right | "
+            "Only the full pool right | Both wrong | Difference | "
+            "95% interval on the difference | Exact p |"
+        ),
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for row in pairs:
         lines.append(
             f"| {row['seed']} | {row['both']} | {row['only_before']} | "
             f"{row['only_after']} | {row['neither']} | "
             f"{points(row['difference'], signed=True)} | "
             f"{points(row['interval'][0], signed=True)} to "
-            f"{points(row['interval'][1], signed=True)} | {row['p']:.2f} |")
+            f"{points(row['interval'][1], signed=True)} | {row['p']:.2f} |"
+        )
     return "\n".join(lines)
 
 
@@ -300,8 +367,14 @@ def draw_curve(measured_by_approach, destination):
         # below zero in floating point and matplotlib refuses a negative bar
         low = [max(0.0, (point["mean"] - point["low"]) * 100) for point in measured]
         high = [max(0.0, (point["high"] - point["mean"]) * 100) for point in measured]
-        axes.errorbar(x, y, yerr=[low, high], marker="o", capsize=4,
-                      label=APPROACH_NAMES[approach])
+        axes.errorbar(
+            x,
+            y,
+            yerr=[low, high],
+            marker="o",
+            capsize=4,
+            label=APPROACH_NAMES[approach],
+        )
     axes.set_xlabel("questions trained on (training plus validation)")
     axes.set_ylabel("test accuracy, %")
     axes.set_title("Learning curve on the sealed test split")
@@ -317,22 +390,30 @@ def approach_section(approach, measured, missing, pairs):
     lines = [f"## {name}", ""]
     if not measured:
         return lines + [
-            f"The ledger holds no {name} runs against the current test split, "
-            f"so this curve is not measurable. "
-            f"`python3 tools/learning_curve.py --approach {approach} --record` "
-            f"puts it back."]
+            (
+                f"The ledger holds no {name} runs against the current test split, "
+                f"so this curve is not measurable. "
+                f"`python3 tools/learning_curve.py --approach {approach} --record` "
+                f"puts it back."
+            ),
+        ]
     lines += [
-        (f"Runs at seeds {seed_list(measured[0]['seeds'])}, each point a "
-         f"from-scratch run on that fraction of the training pool."
-         if seed_sets_match(measured) else
-         f"Runs at these seeds by fraction: {seed_coverage(measured)}. Each "
-         f"point is a from-scratch run on that fraction of the training pool."),
+        (
+            f"Runs at seeds {seed_list(measured[0]['seeds'])}, each point a "
+            f"from-scratch run on that fraction of the training pool."
+            if seed_sets_match(measured)
+            else f"Runs at these seeds by fraction: {seed_coverage(measured)}. Each "
+            f"point is a from-scratch run on that fraction of the training pool."
+        ),
         "",
         curve_table(measured),
         "",
-        "Timed on: " + "; ".join(sorted(
-            {hardware for point in measured for hardware in point["hardware"]}))
-        + ". " + TIMING_CAVEAT,
+        "Timed on: "
+        + "; ".join(
+            sorted({hardware for point in measured for hardware in point["hardware"]})
+        )
+        + ". "
+        + TIMING_CAVEAT,
         "",
     ]
     if len(measured) > 1:
@@ -346,11 +427,13 @@ def approach_section(approach, measured, missing, pairs):
         ]
     if pairs:
         lines += [
-            f"The last step of the curve, tested question by question. Each row "
-            f"pairs one seed's {measured[-2]['fraction']:.0%} run against the "
-            f"same seed's {measured[-1]['fraction']:.0%} run on the same test "
-            f"questions, so nothing differs between the two but the amount of "
-            f"training data.",
+            (
+                f"The last step of the curve, tested question by question. Each row "
+                f"pairs one seed's {measured[-2]['fraction']:.0%} run against the "
+                f"same seed's {measured[-1]['fraction']:.0%} run on the same test "
+                f"questions, so nothing differs between the two but the amount of "
+                f"training data."
+            ),
             "",
             paired_table(pairs),
             "",
@@ -361,8 +444,9 @@ def approach_section(approach, measured, missing, pairs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--dated", default="",
-                        help="date to stamp on the report, e.g. 2026-09-07")
+    parser.add_argument(
+        "--dated", default="", help="date to stamp on the report, e.g. 2026-09-07"
+    )
     arguments = parser.parse_args()
 
     assert_inside_project(CURVE_PATH)
@@ -372,12 +456,17 @@ def main():
     y_true = read_split("test")[1]
     fingerprint = dataset_fingerprint()
 
-    measured = {approach: curve_points(approach, y_true)
-                for approach in (APPROACH_ONE, APPROACH_TWO)}
-    pairs = {approach: paired_last_step(y_true, points_)
-             for approach, points_ in measured.items()}
-    drawable = {approach: points_ for approach, points_ in measured.items()
-                if len(points_) > 1}
+    measured = {
+        approach: curve_points(approach, y_true)
+        for approach in (APPROACH_ONE, APPROACH_TWO)
+    }
+    pairs = {
+        approach: paired_last_step(y_true, points_)
+        for approach, points_ in measured.items()
+    }
+    drawable = {
+        approach: points_ for approach, points_ in measured.items() if len(points_) > 1
+    }
     if drawable:
         draw_curve(drawable, PLOT_PATH)
 
@@ -385,49 +474,57 @@ def main():
     sections = [
         "# Learning curve",
         "",
-        f"Generated by `python3 tools/report_learning_curve.py` from the run "
-        f"ledger.{stamp} Nothing here is typed by hand.",
+        (
+            f"Generated by `python3 tools/report_learning_curve.py` from the run "
+            f"ledger.{stamp} Nothing here is typed by hand."
+        ),
         "",
         "## What was varied, and what was not",
         "",
-        f"Each point trains one approach on a fraction of the training pool and "
-        f"scores it on the sealed test split. The procedure is the one "
-        f"RESULTS.md measures both approaches under: {METHOD}. Only the amount "
-        f"of training data changes.",
+        (
+            f"Each point trains one approach on a fraction of the training pool and "
+            f"scores it on the sealed test split. The procedure is the one "
+            f"RESULTS.md measures both approaches under: {METHOD}. Only the amount "
+            f"of training data changes."
+        ),
         "",
-        f"A subsample takes whole papers, never single questions, by the same "
-        f"grouping `src/split.py` uses: dropping half of a paper's questions "
-        f"and keeping the rest would leave the model that paper's house style "
-        f"and context at a quarter of the row count, which is not what a "
-        f"quarter of the data looks like. Training and validation are "
-        f"subsampled independently at the same fraction, so the split's own "
-        f"proportions hold at every point.",
+        (
+            "A subsample takes whole papers, never single questions, by the same "
+            "grouping `src/split.py` uses: dropping half of a paper's questions "
+            "and keeping the rest would leave the model that paper's house style "
+            "and context at a quarter of the row count, which is not what a "
+            "quarter of the data looks like. Training and validation are "
+            "subsampled independently at the same fraction, so the split's own "
+            "proportions hold at every point."
+        ),
         "",
-        f"The test split never moves. It is `test.jsonl`, "
-        f"{fingerprint['counts']['test']} questions, sha256 "
-        f"`{fingerprint['test_hash']}`, out of the frozen "
-        f"`data/private/questions.jsonl`, {fingerprint['rows']} labelled rows, "
-        f"sha256 `{fingerprint['hash']}`. Every run in the ledger carries that "
-        f"test hash and the fraction it was trained on; a run against any other "
-        f"split is ignored, and a fractional run cannot reach RESULTS.md.",
+        (
+            f"The test split never moves. It is `test.jsonl`, "
+            f"{fingerprint['counts']['test']} questions, sha256 "
+            f"`{fingerprint['test_hash']}`, out of the frozen "
+            f"`data/private/questions.jsonl`, {fingerprint['rows']} labelled rows, "
+            f"sha256 `{fingerprint['hash']}`. Every run in the ledger carries that "
+            f"test hash and the fraction it was trained on; a run against any other "
+            f"split is ignored, and a fractional run cannot reach RESULTS.md."
+        ),
         "",
     ]
     if drawable:
         sections += ["![Learning curve](docs/learning-curve.png)", ""]
 
     for approach in (APPROACH_ONE, APPROACH_TWO):
-        sections += approach_section(approach, measured[approach],
-                                     missing_fractions(approach),
-                                     pairs[approach]) + [""]
+        sections += approach_section(
+            approach, measured[approach], missing_fractions(approach), pairs[approach]
+        ) + [""]
 
     sections += ["## Do the two curves have the same shape?", ""]
     if all(len(points_) > 1 for points_ in measured.values()):
-        sections.append(curves_differ(measured[APPROACH_ONE],
-                                      measured[APPROACH_TWO]))
+        sections.append(curves_differ(measured[APPROACH_ONE], measured[APPROACH_TWO]))
     else:
         sections.append(
             "Only one approach has a curve against the current test split, so "
-            "there is nothing to compare its shape to.")
+            "there is nothing to compare its shape to."
+        )
 
     CURVE_PATH.write_text("\n".join(sections) + "\n", encoding="utf-8")
     print(f"wrote {CURVE_PATH.relative_to(PROJECT_ROOT)}")

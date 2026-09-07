@@ -31,7 +31,8 @@ from split import SPLIT_NAMES, leakage_group_key
 FULL = 1.0
 
 
-class SubsampleError(Exception): pass
+class SubsampleError(Exception):
+    pass
 
 
 def _groups_in_order(rows, seed, split_name):
@@ -85,7 +86,8 @@ def subsample_training_pool(split_rows, fraction, seed):
     reduced = {"test": list(split_rows["test"])}
     for split_name in ("train", "val"):
         reduced[split_name] = subsample_rows(
-            split_rows[split_name], fraction, seed, split_name)
+            split_rows[split_name], fraction, seed, split_name
+        )
     check_subsample(split_rows, reduced, fraction)
     return reduced
 
@@ -93,12 +95,17 @@ def subsample_training_pool(split_rows, fraction, seed):
 # ---------------------------------------------------------------------------
 # checks, run before anything is trained on the result
 
+
 def check_subsample(split_rows, reduced, fraction):
     """Four things that must hold of every point on the curve."""
     # Rule 1: the test split is untouched, or the points are not comparable.
-    if [row["id"] for row in reduced["test"]] != [row["id"] for row in split_rows["test"]]:
-        raise SubsampleError("the test split moved; every point on the curve "
-                             "must be scored on the same sealed questions")
+    if [row["id"] for row in reduced["test"]] != [
+        row["id"] for row in split_rows["test"]
+    ]:
+        raise SubsampleError(
+            "the test split moved; every point on the curve "
+            "must be scored on the same sealed questions"
+        )
 
     # Rule 2: no group is half kept. Whole papers in or out, never split.
     for split_name in ("train", "val"):
@@ -112,7 +119,8 @@ def check_subsample(split_rows, reduced, fraction):
                 raise SubsampleError(
                     f"group {group_key} is {present} of {len(group_rows)} rows "
                     f"in the '{split_name}' subsample; a paper is kept whole or "
-                    f"dropped whole")
+                    f"dropped whole"
+                )
 
     # Rule 3: every kept row was in the split it is now in, and only once.
     for split_name in SPLIT_NAMES:
@@ -120,7 +128,8 @@ def check_subsample(split_rows, reduced, fraction):
         kept = [row["id"] for row in reduced[split_name]]
         if len(set(kept)) != len(kept) or not set(kept) <= set(original):
             raise SubsampleError(
-                f"the '{split_name}' subsample invented or duplicated rows")
+                f"the '{split_name}' subsample invented or duplicated rows"
+            )
 
     # Rule 4: something is left to train on and something to tune on. A
     # validation split emptied by the subsample would silently turn the epoch
@@ -129,7 +138,8 @@ def check_subsample(split_rows, reduced, fraction):
         if not reduced[split_name]:
             raise SubsampleError(
                 f"fraction {fraction} left the '{split_name}' split empty; "
-                f"the curve cannot have a point here")
+                f"the curve cannot have a point here"
+            )
 
 
 def pool_rows(reduced):

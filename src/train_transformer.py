@@ -77,10 +77,12 @@ def balanced_class_weights(chapters, device):
     way, and dividing by its count would not survive the attempt.
     """
     present = numpy.unique(chapters)
-    weight_by_chapter = dict(zip(
-        present,
-        compute_class_weight("balanced", classes=present, y=chapters),
-    ))
+    weight_by_chapter = dict(
+        zip(
+            present,
+            compute_class_weight("balanced", classes=present, y=chapters),
+        )
+    )
     weights = [weight_by_chapter.get(slug, 1.0) for slug in CHAPTER_SLUGS]
     return torch.tensor(weights, dtype=torch.float, device=device)
 
@@ -106,8 +108,9 @@ def encode(question_tokeniser, questions, chapters, max_tokens=MAX_TOKENS):
     )
 
 
-def run_one_epoch(chapter_transformer, batches, device, optimiser=None,
-                  class_weights=None):
+def run_one_epoch(
+    chapter_transformer, batches, device, optimiser=None, class_weights=None
+):
     """Train for one pass if given an optimiser, otherwise just measure.
 
     The loss is computed here rather than read off outputs.loss, because the
@@ -136,8 +139,14 @@ def run_one_epoch(chapter_transformer, batches, device, optimiser=None,
     return correct / total
 
 
-def fine_tune(train_dataset, epochs, device, validation_dataset=None,
-              class_weights=None, seed=SEED):
+def fine_tune(
+    train_dataset,
+    epochs,
+    device,
+    validation_dataset=None,
+    class_weights=None,
+    seed=SEED,
+):
     """Fine-tune a fresh copy of the base model for a fixed number of epochs.
 
     Returns the model and, when a validation set is supplied, that set's
@@ -152,8 +161,9 @@ def fine_tune(train_dataset, epochs, device, validation_dataset=None,
     train_batches = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     validation_scores = []
     for epoch in range(1, epochs + 1):
-        train_accuracy = run_one_epoch(chapter_transformer, train_batches, device,
-                                       optimiser, class_weights)
+        train_accuracy = run_one_epoch(
+            chapter_transformer, train_batches, device, optimiser, class_weights
+        )
         line = f"   epoch {epoch}   training accuracy {train_accuracy:.3f}"
         if validation_dataset is not None:
             batches = DataLoader(validation_dataset, batch_size=BATCH_SIZE)
@@ -164,9 +174,14 @@ def fine_tune(train_dataset, epochs, device, validation_dataset=None,
     return chapter_transformer, validation_scores
 
 
-def fit_on_the_full_dataset(device, use_class_weights=True,
-                            max_tokens=MAX_TOKENS, seed=SEED,
-                            train_data=None, val_data=None):
+def fit_on_the_full_dataset(
+    device,
+    use_class_weights=True,
+    max_tokens=MAX_TOKENS,
+    seed=SEED,
+    train_data=None,
+    val_data=None,
+):
     """Tune the epoch count on validation, then refit on training plus validation.
 
     Returns the tokeniser and the fitted model. main saves them. The seed and
@@ -181,52 +196,73 @@ def fit_on_the_full_dataset(device, use_class_weights=True,
     val_questions, val_chapters = val_data or read_split("val")
 
     question_tokeniser = AutoTokenizer.from_pretrained(BASE_MODEL)
-    train_dataset = encode(question_tokeniser, train_questions, train_chapters,
-                           max_tokens)
-    val_dataset = encode(question_tokeniser, val_questions, val_chapters,
-                         max_tokens)
+    train_dataset = encode(
+        question_tokeniser, train_questions, train_chapters, max_tokens
+    )
+    val_dataset = encode(question_tokeniser, val_questions, val_chapters, max_tokens)
 
     # Weights come from the rows being trained on, so the tuning run is weighted
     # by the training split and the refit by training plus validation. Deriving
     # them once from the whole corpus would let the validation rows' chapter
     # counts inform the run that is choosing the epoch count.
-    tuning_weights = (balanced_class_weights(train_chapters, device)
-                      if use_class_weights else None)
+    tuning_weights = (
+        balanced_class_weights(train_chapters, device) if use_class_weights else None
+    )
 
     print(f"choosing epoch count on {len(val_questions)} validation questions:")
-    _, validation_scores = fine_tune(train_dataset, MAX_EPOCHS, device,
-                                     val_dataset, tuning_weights, seed)
+    _, validation_scores = fine_tune(
+        train_dataset, MAX_EPOCHS, device, val_dataset, tuning_weights, seed
+    )
     best_epochs = validation_scores.index(max(validation_scores)) + 1
-    print(f"\nbest at {best_epochs} epochs, {max(validation_scores):.3f} validation accuracy")
+    print(
+        f"\nbest at {best_epochs} epochs, {max(validation_scores):.3f} validation accuracy"
+    )
 
     # Retrain from scratch on training plus validation, exactly as Approach 1
     # refits after tuning. Continuing the existing run instead would mean the
     # final model had trained on the validation rows more than the training rows.
-    print(f"\nretraining on all {len(train_questions) + len(val_questions)} for {best_epochs} epochs:")
+    print(
+        f"\nretraining on all {len(train_questions) + len(val_questions)} for {best_epochs} epochs:"
+    )
     final_questions = train_questions + val_questions
     final_chapters = train_chapters + val_chapters
-    final_dataset = encode(question_tokeniser, final_questions, final_chapters,
-                           max_tokens)
-    final_weights = (balanced_class_weights(final_chapters, device)
-                     if use_class_weights else None)
-    chapter_transformer, _ = fine_tune(final_dataset, best_epochs, device,
-                                       class_weights=final_weights, seed=seed)
+    final_dataset = encode(
+        question_tokeniser, final_questions, final_chapters, max_tokens
+    )
+    final_weights = (
+        balanced_class_weights(final_chapters, device) if use_class_weights else None
+    )
+    chapter_transformer, _ = fine_tune(
+        final_dataset, best_epochs, device, class_weights=final_weights, seed=seed
+    )
     return question_tokeniser, chapter_transformer
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Fine-tune DistilBERT to pick the chapter, and save it "
-                    "beside Approach 1's model.")
-    parser.add_argument("--seed", type=int, default=SEED,
-                        help="seed for the weight initialisation and the batch "
-                             "order (default %(default)s)")
-    parser.add_argument("--max-tokens", type=int, default=MAX_TOKENS,
-                        help="tokens of each question the model reads before "
-                             "the rest is truncated (default %(default)s)")
-    parser.add_argument("--unweighted", action="store_true",
-                        help="drop the balanced class weights from the loss, "
-                             "which is the comparison they were added against")
+        "beside Approach 1's model."
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=SEED,
+        help="seed for the weight initialisation and the batch "
+        "order (default %(default)s)",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=MAX_TOKENS,
+        help="tokens of each question the model reads before "
+        "the rest is truncated (default %(default)s)",
+    )
+    parser.add_argument(
+        "--unweighted",
+        action="store_true",
+        help="drop the balanced class weights from the loss, "
+        "which is the comparison they were added against",
+    )
     arguments = parser.parse_args()
 
     device = pick_device()

@@ -58,8 +58,10 @@ APPROACH_NAMES = {APPROACH_ONE: "Approach 1", APPROACH_TWO: "Approach 2"}
 # mean was over these three, so the baseline is measured over the same three.
 DEFAULT_SEEDS = (42, 43, 44)
 
-METHOD = ("train on the training split, tune on validation, refit from scratch "
-          "on training plus validation, score the sealed test split")
+METHOD = (
+    "train on the training split, tune on validation, refit from scratch "
+    "on training plus validation, score the sealed test split"
+)
 
 # The conditions a run must have been made under to count towards the headline.
 # tools/compare_runs.py also runs the transformer unweighted and truncated; those
@@ -91,13 +93,13 @@ def default_max_tokens():
 
 
 def default_conditions():
-    return {"class_weights": DEFAULT_CLASS_WEIGHTS,
-            "max_tokens": default_max_tokens()}
+    return {"class_weights": DEFAULT_CLASS_WEIGHTS, "max_tokens": default_max_tokens()}
 
 
 @dataclass
 class Run:
     """Everything the report needs from one run, and nothing private."""
+
     approach: str
     seed: int
     predicted: list
@@ -135,6 +137,7 @@ class Run:
 # ---------------------------------------------------------------------------
 # What the run is stamped with
 
+
 def file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
 
@@ -152,13 +155,19 @@ def hardware_description(compute):
     chip = platform.processor() or platform.machine()
     if platform.system() == "Darwin":
         try:
-            chip = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
-                                  capture_output=True, text=True,
-                                  check=True).stdout.strip() or chip
+            chip = (
+                subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.strip()
+                or chip
+            )
         except (OSError, subprocess.CalledProcessError):
             pass
     try:
-        memory_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2 ** 30
+        memory_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
         memory = f"{memory_gb:.0f} GB"
     except (ValueError, OSError, AttributeError):
         memory = "memory unknown"
@@ -172,6 +181,7 @@ def _now():
 # ---------------------------------------------------------------------------
 # The rows a run is given
 
+
 def training_pool(fraction=FULL, seed=DEFAULT_SEEDS[0]):
     """The frozen split, or a group-aware fraction of its training pool.
 
@@ -181,8 +191,10 @@ def training_pool(fraction=FULL, seed=DEFAULT_SEEDS[0]):
     The subsample's four checks run either way, so the full-data case is
     checked by the same code that checks the curve's points.
     """
-    split_rows = {split_name: read_rows(PRIVATE_DATA / f"{split_name}.jsonl")
-                  for split_name in SPLIT_NAMES}
+    split_rows = {
+        split_name: read_rows(PRIVATE_DATA / f"{split_name}.jsonl")
+        for split_name in SPLIT_NAMES
+    }
     return subsample_training_pool(split_rows, fraction, seed)
 
 
@@ -201,12 +213,15 @@ def questions_and_chapters(rows):
     """
     from features import normalise_question
 
-    return ([normalise_question(row["text"]) for row in rows],
-            [row["chapter"] for row in rows])
+    return (
+        [normalise_question(row["text"]) for row in rows],
+        [row["chapter"] for row in rows],
+    )
 
 
 # ---------------------------------------------------------------------------
 # Approach 1
+
 
 def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     """Approach 1's whole training procedure, timed as one piece.
@@ -220,18 +235,24 @@ def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     from train import choose_regularisation, train_chapter_classifier
 
     started = time.perf_counter()
-    silence = (contextlib.redirect_stdout(io.StringIO()) if quiet
-               else contextlib.nullcontext())
+    silence = (
+        contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
+    )
     with silence:
         question_vectoriser = fit_question_vectoriser(train_questions)
         regularisation, _ = choose_regularisation(
-            to_features(question_vectoriser, train_questions), y_train,
-            to_features(question_vectoriser, val_questions), y_val)
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            to_features(question_vectoriser, val_questions),
+            y_val,
+        )
         final_questions = train_questions + val_questions
         question_vectoriser = fit_question_vectoriser(final_questions)
         chapter_classifier = train_chapter_classifier(
-            to_features(question_vectoriser, final_questions), y_train + y_val,
-            regularisation)
+            to_features(question_vectoriser, final_questions),
+            y_train + y_val,
+            regularisation,
+        )
     return question_vectoriser, chapter_classifier, time.perf_counter() - started
 
 
@@ -253,17 +274,26 @@ def run_tfidf(seed=42, quiet=False, fraction=FULL):
     val_questions, y_val = questions_and_chapters(reduced["val"])
     test_questions, y_test = read_split("test")
     question_vectoriser, chapter_classifier, seconds = fit_tfidf(
-        train_questions, y_train, val_questions, y_val, quiet=quiet)
+        train_questions, y_train, val_questions, y_val, quiet=quiet
+    )
     predicted = chapter_classifier.predict(
-        to_features(question_vectoriser, test_questions))
+        to_features(question_vectoriser, test_questions)
+    )
     return Run(
-        approach=APPROACH_ONE, seed=seed, predicted=[str(p) for p in predicted],
-        test_hash=split_hash(), test_rows=len(y_test), train_seconds=seconds,
-        parameters=int(chapter_classifier.coef_.size
-                       + chapter_classifier.intercept_.size),
+        approach=APPROACH_ONE,
+        seed=seed,
+        predicted=[str(p) for p in predicted],
+        test_hash=split_hash(),
+        test_rows=len(y_test),
+        train_seconds=seconds,
+        parameters=int(
+            chapter_classifier.coef_.size + chapter_classifier.intercept_.size
+        ),
         features=len(question_vectoriser.vocabulary_),
-        hardware=hardware_description("CPU"), recorded=_now(),
-        fraction=float(fraction), train_rows=pool_rows(reduced),
+        hardware=hardware_description("CPU"),
+        recorded=_now(),
+        fraction=float(fraction),
+        train_rows=pool_rows(reduced),
     )
 
 
@@ -278,10 +308,14 @@ def resplit_tfidf(rows, seed):
     which is the noise a confidence interval is only estimating.
     """
     from features import normalise_question, to_features
-    from split import (DEFAULT_MIN_TEST_ROWS, assign_groups_to_splits,
-                       check_every_chapter_has_test_rows,
-                       check_no_group_straddles_splits, check_rows_conserved,
-                       check_split_is_reproducible)
+    from split import (
+        DEFAULT_MIN_TEST_ROWS,
+        assign_groups_to_splits,
+        check_every_chapter_has_test_rows,
+        check_no_group_straddles_splits,
+        check_rows_conserved,
+        check_split_is_reproducible,
+    )
 
     split_rows = assign_groups_to_splits(rows, seed, DEFAULT_MIN_TEST_ROWS)
     check_no_group_straddles_splits(split_rows)
@@ -296,10 +330,15 @@ def resplit_tfidf(rows, seed):
         return [row["chapter"] for row in split_rows[split_name]]
 
     question_vectoriser, chapter_classifier, _ = fit_tfidf(
-        questions("train"), chapters("train"),
-        questions("val"), chapters("val"), quiet=True)
+        questions("train"),
+        chapters("train"),
+        questions("val"),
+        chapters("val"),
+        quiet=True,
+    )
     predicted = chapter_classifier.predict(
-        to_features(question_vectoriser, questions("test")))
+        to_features(question_vectoriser, questions("test"))
+    )
     y_test = chapters("test")
     return sum(t == p for t, p in zip(y_test, predicted)), len(y_test)
 
@@ -307,18 +346,23 @@ def resplit_tfidf(rows, seed):
 # ---------------------------------------------------------------------------
 # Approach 2
 
-def run_transformer(seed=42, use_class_weights=True, max_tokens=None,
-                    fraction=FULL):
+
+def run_transformer(seed=42, use_class_weights=True, max_tokens=None, fraction=FULL):
     """Fine-tune DistilBERT from scratch on the frozen split and score the test rows.
 
     torch is imported here rather than at the top so that the ledger and the
     baseline can be used on a machine without it.
     """
     import torch
+
     from evaluate_transformer import predict_chapters
     from features import read_split
-    from train_transformer import (MAX_TOKENS, encode, fit_on_the_full_dataset,
-                                   pick_device)
+    from train_transformer import (
+        MAX_TOKENS,
+        encode,
+        fit_on_the_full_dataset,
+        pick_device,
+    )
 
     if max_tokens is None:
         max_tokens = MAX_TOKENS
@@ -326,9 +370,13 @@ def run_transformer(seed=42, use_class_weights=True, max_tokens=None,
     device = pick_device()
     started = time.perf_counter()
     question_tokeniser, chapter_transformer = fit_on_the_full_dataset(
-        device, use_class_weights=use_class_weights, max_tokens=max_tokens,
-        seed=seed, train_data=questions_and_chapters(reduced["train"]),
-        val_data=questions_and_chapters(reduced["val"]))
+        device,
+        use_class_weights=use_class_weights,
+        max_tokens=max_tokens,
+        seed=seed,
+        train_data=questions_and_chapters(reduced["train"]),
+        val_data=questions_and_chapters(reduced["val"]),
+    )
     seconds = time.perf_counter() - started
 
     test_questions, y_test = read_split("test")
@@ -343,18 +391,28 @@ def run_transformer(seed=42, use_class_weights=True, max_tokens=None,
         torch.mps.empty_cache()
 
     return Run(
-        approach=APPROACH_TWO, seed=seed, predicted=list(predicted),
-        test_hash=split_hash(), test_rows=len(y_test), train_seconds=seconds,
-        parameters=int(parameters), features=None,
-        hardware=hardware_description(device.type.upper()), recorded=_now(),
-        conditions={"class_weights": bool(use_class_weights),
-                    "max_tokens": int(max_tokens)},
-        fraction=float(fraction), train_rows=pool_rows(reduced),
+        approach=APPROACH_TWO,
+        seed=seed,
+        predicted=list(predicted),
+        test_hash=split_hash(),
+        test_rows=len(y_test),
+        train_seconds=seconds,
+        parameters=int(parameters),
+        features=None,
+        hardware=hardware_description(device.type.upper()),
+        recorded=_now(),
+        conditions={
+            "class_weights": bool(use_class_weights),
+            "max_tokens": int(max_tokens),
+        },
+        fraction=float(fraction),
+        train_rows=pool_rows(reduced),
     )
 
 
 # ---------------------------------------------------------------------------
 # The ledger
+
 
 def same_fraction(one, two):
     """Fractions compared as the floats they are, not with ==."""
@@ -371,9 +429,11 @@ def fraction_tag(fraction):
 
 
 def record_path(run, runs_dir=None):
-    return ((runs_dir or RUNS_DIR)
-            / f"{run.approach}-seed{run.seed}{fraction_tag(run.fraction)}"
-              f"-{run.test_hash}.json")
+    return (
+        (runs_dir or RUNS_DIR)
+        / f"{run.approach}-seed{run.seed}{fraction_tag(run.fraction)}"
+        f"-{run.test_hash}.json"
+    )
 
 
 def record_run(run, runs_dir=None):
@@ -395,8 +455,7 @@ def read_record(path):
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as problem:
-        print(f"ignoring ledger record {path}: unreadable ({problem})",
-              file=sys.stderr)
+        print(f"ignoring ledger record {path}: unreadable ({problem})", file=sys.stderr)
         return None
     if not isinstance(record, dict):
         print(f"ignoring ledger record {path}: not a run record", file=sys.stderr)
@@ -404,13 +463,16 @@ def read_record(path):
     try:
         return Run(**record)
     except TypeError as problem:
-        print(f"ignoring ledger record {path}: written under another schema "
-              f"({problem})", file=sys.stderr)
+        print(
+            f"ignoring ledger record {path}: written under another schema ({problem})",
+            file=sys.stderr,
+        )
         return None
 
 
-def load_runs(approach, test_hash=None, conditions=_DEFAULT, runs_dir=None,
-              *, fraction=FULL):
+def load_runs(
+    approach, test_hash=None, conditions=_DEFAULT, runs_dir=None, *, fraction=FULL
+):
     """Every recorded run of one approach against the current test split.
 
     Records made against another split, under other conditions, or on another

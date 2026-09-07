@@ -31,10 +31,18 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from features import read_split  # noqa: E402
-from runs import (APPROACH_NAMES, APPROACH_ONE, APPROACH_TWO,  # noqa: E402
-                  DEFAULT_SEEDS, load_runs, record_run, run_tfidf,
-                  run_transformer, same_fraction)
+from features import read_split
+from runs import (
+    APPROACH_NAMES,
+    APPROACH_ONE,
+    APPROACH_TWO,
+    DEFAULT_SEEDS,
+    load_runs,
+    record_run,
+    run_tfidf,
+    run_transformer,
+    same_fraction,
+)
 
 FRACTIONS = (0.25, 0.50, 0.75, 1.00)
 
@@ -64,40 +72,66 @@ def curve(approach, fractions, seeds, record, redo):
             run = None if redo else recorded_run(approach, fraction, seed)
             reused = run is not None
             if run is None:
-                run = RUNNERS[approach](seed=seed, fraction=fraction,
-                                        **EXTRA_ARGUMENTS[approach])
+                run = RUNNERS[approach](
+                    seed=seed, fraction=fraction, **EXTRA_ARGUMENTS[approach]
+                )
                 if record:
                     record_run(run)
             accuracies.append(run.accuracy(y_test))
             label = f"{fraction:.0%} seed {seed}" + (" (ledger)" if reused else "")
-            print(f"  {label:<22}{run.rows_trained_on():>12}{accuracies[-1]:>11.1%}"
-                  f"{run.train_seconds:>12.1f}s", flush=True)
+            print(
+                f"  {label:<22}{run.rows_trained_on():>12}{accuracies[-1]:>11.1%}"
+                f"{run.train_seconds:>12.1f}s",
+                flush=True,
+            )
         if len(accuracies) > 1:
-            print(f"  {'mean of ' + str(len(accuracies)) + ' seeds':<22}"
-                  f"{'':>12}{statistics.fmean(accuracies):>11.1%}")
+            print(
+                f"  {'mean of ' + str(len(accuracies)) + ' seeds':<22}"
+                f"{'':>12}{statistics.fmean(accuracies):>11.1%}"
+            )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--approach", choices=("both", APPROACH_ONE, APPROACH_TWO),
-                        default="both", help="which approach to run (default both)")
-    parser.add_argument("--fractions", type=float, nargs="+", default=list(FRACTIONS),
-                        help="fractions of the training pool (default %(default)s)")
-    parser.add_argument("--seeds", type=int, nargs="+", default=list(DEFAULT_SEEDS),
-                        help="seeds to repeat each point over (default %(default)s)")
-    parser.add_argument("--record", action="store_true",
-                        help="write each new run to data/private/runs/ for "
-                             "tools/report_learning_curve.py")
-    parser.add_argument("--redo", action="store_true",
-                        help="re-run points the ledger already holds")
+    parser.add_argument(
+        "--approach",
+        choices=("both", APPROACH_ONE, APPROACH_TWO),
+        default="both",
+        help="which approach to run (default both)",
+    )
+    parser.add_argument(
+        "--fractions",
+        type=float,
+        nargs="+",
+        default=list(FRACTIONS),
+        help="fractions of the training pool (default %(default)s)",
+    )
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=list(DEFAULT_SEEDS),
+        help="seeds to repeat each point over (default %(default)s)",
+    )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="write each new run to data/private/runs/ for "
+        "tools/report_learning_curve.py",
+    )
+    parser.add_argument(
+        "--redo", action="store_true", help="re-run points the ledger already holds"
+    )
     arguments = parser.parse_args()
 
-    approaches = ((APPROACH_ONE, APPROACH_TWO) if arguments.approach == "both"
-                  else (arguments.approach,))
+    approaches = (
+        (APPROACH_ONE, APPROACH_TWO)
+        if arguments.approach == "both"
+        else (arguments.approach,)
+    )
     fractions = [1.0 if same_fraction(f, 1.0) else f for f in arguments.fractions]
     for approach in approaches:
-        curve(approach, fractions, arguments.seeds, arguments.record,
-              arguments.redo)
+        curve(approach, fractions, arguments.seeds, arguments.record, arguments.redo)
 
 
 if __name__ == "__main__":
