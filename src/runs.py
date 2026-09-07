@@ -16,6 +16,12 @@ that where a timestamp only guesses at it.
 
 The predictions are stored positionally against test.jsonl, so a record holds
 chapter slugs and numbers and nothing else: no question text, no weights.
+
+A run also carries the fraction of the training pool it saw, which is 1.0 for
+every run of the headline comparison and less for the learning-curve points in
+tools/learning_curve.py. The reader filters on it exactly as it filters on the
+split hash, so a quarter-data run cannot drift into the headline: load_runs
+returns whole-data runs unless asked for another fraction.
 """
 
 import contextlib
@@ -29,14 +35,18 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
+from learning_curve import FULL, pool_rows, subsample_training_pool
 from paths import PRIVATE_DATA, assert_inside_project
+from split import SPLIT_NAMES, read_rows
 
-# features, split and train pull in scikit-learn, and train_transformer pulls in
-# torch. Neither is imported here: the ledger below is plain JSON handling, and
-# the tests that cover its leak guard run on a machine with only pytest
-# installed. Each runner imports what it needs when it is called.
+# learning_curve and split are plain Python, so importing them here costs
+# nothing. features and train pull in scikit-learn and train_transformer pulls
+# in torch, and none of those is imported at the top: the ledger below is plain
+# JSON handling, and the tests that cover its leak guard run on a machine with
+# only pytest installed. Each runner imports what it needs when it is called.
 
 RUNS_DIR = PRIVATE_DATA / "runs"
 
@@ -48,8 +58,10 @@ APPROACH_NAMES = {APPROACH_ONE: "Approach 1", APPROACH_TWO: "Approach 2"}
 # mean was over these three, so the baseline is measured over the same three.
 DEFAULT_SEEDS = (42, 43, 44)
 
-METHOD = ("train on the training split, tune on validation, refit from scratch "
-          "on training plus validation, score the sealed test split")
+METHOD = (
+    "train on the training split, tune on validation, refit from scratch "
+    "on training plus validation, score the sealed test split"
+)
 
 # The conditions a run must have been made under to count towards the headline.
 # tools/compare_runs.py also runs the transformer unweighted and truncated; those
@@ -81,13 +93,13 @@ def default_max_tokens():
 
 
 def default_conditions():
-    return {"class_weights": DEFAULT_CLASS_WEIGHTS,
-            "max_tokens": default_max_tokens()}
+    return {"class_weights": DEFAULT_CLASS_WEIGHTS, "max_tokens": default_max_tokens()}
 
 
 @dataclass
 class Run:
     """Everything the report needs from one run, and nothing private."""
+
     approach: str
     seed: int
     predicted: list
@@ -100,6 +112,20 @@ class Run:
     method: str = METHOD
     features: int = None
     conditions: dict = field(default_factory=default_conditions)
+    # How much of the training pool this run saw, and how many rows that was.
+    # Both default to the whole-data case so that records written before the
+    # learning curve existed still read back as the full-data runs they are.
+    fraction: float = FULL
+    train_rows: int = None
+
+    def rows_trained_on(self):
+        """Rows this run was refit on: training plus validation, after any
+        subsample. Records written before the field existed are whole-data runs,
+        so the whole pool is the honest answer for them.
+        """
+        if self.train_rows is not None:
+            return self.train_rows
+        return full_pool_rows()
 
     def correct(self, y_true):
         return sum(t == p for t, p in zip(y_true, self.predicted))
@@ -110,6 +136,7 @@ class Run:
 
 # ---------------------------------------------------------------------------
 # What the run is stamped with
+
 
 def file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
@@ -128,13 +155,19 @@ def hardware_description(compute):
     chip = platform.processor() or platform.machine()
     if platform.system() == "Darwin":
         try:
-            chip = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"],
-                                  capture_output=True, text=True,
-                                  check=True).stdout.strip() or chip
+            chip = (
+                subprocess.run(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.strip()
+                or chip
+            )
         except (OSError, subprocess.CalledProcessError):
             pass
     try:
-        memory_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2 ** 30
+        memory_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
         memory = f"{memory_gb:.0f} GB"
     except (ValueError, OSError, AttributeError):
         memory = "memory unknown"
@@ -146,7 +179,49 @@ def _now():
 
 
 # ---------------------------------------------------------------------------
+# The rows a run is given
+
+
+def training_pool(fraction=FULL, seed=DEFAULT_SEEDS[0]):
+    """The frozen split, or a group-aware fraction of its training pool.
+
+    fraction=1.0 is the whole split and the path both approaches' headline runs
+    take; anything less drops whole papers from training and validation and
+    leaves the test rows exactly where they are (see src/learning_curve.py).
+    The subsample's four checks run either way, so the full-data case is
+    checked by the same code that checks the curve's points.
+    """
+    split_rows = {
+        split_name: read_rows(PRIVATE_DATA / f"{split_name}.jsonl")
+        for split_name in SPLIT_NAMES
+    }
+    return subsample_training_pool(split_rows, fraction, seed)
+
+
+@lru_cache(maxsize=1)
+def full_pool_rows():
+    """Rows in the whole training pool, read once."""
+    return pool_rows(training_pool(FULL))
+
+
+def questions_and_chapters(rows):
+    """Rows as the two parallel lists every trainer here is fed.
+
+    Identical to features.read_split's output for the same rows, because it is
+    the same normalisation: a subsampled pool must reach the model in exactly
+    the shape a whole one does.
+    """
+    from features import normalise_question
+
+    return (
+        [normalise_question(row["text"]) for row in rows],
+        [row["chapter"] for row in rows],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Approach 1
+
 
 def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     """Approach 1's whole training procedure, timed as one piece.
@@ -160,46 +235,65 @@ def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     from train import choose_regularisation, train_chapter_classifier
 
     started = time.perf_counter()
-    silence = (contextlib.redirect_stdout(io.StringIO()) if quiet
-               else contextlib.nullcontext())
+    silence = (
+        contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
+    )
     with silence:
         question_vectoriser = fit_question_vectoriser(train_questions)
         regularisation, _ = choose_regularisation(
-            to_features(question_vectoriser, train_questions), y_train,
-            to_features(question_vectoriser, val_questions), y_val)
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            to_features(question_vectoriser, val_questions),
+            y_val,
+        )
         final_questions = train_questions + val_questions
         question_vectoriser = fit_question_vectoriser(final_questions)
         chapter_classifier = train_chapter_classifier(
-            to_features(question_vectoriser, final_questions), y_train + y_val,
-            regularisation)
+            to_features(question_vectoriser, final_questions),
+            y_train + y_val,
+            regularisation,
+        )
     return question_vectoriser, chapter_classifier, time.perf_counter() - started
 
 
-def run_tfidf(seed=42, quiet=False):
+def run_tfidf(seed=42, quiet=False, fraction=FULL):
     """Refit Approach 1 from scratch on the frozen split and score the test rows.
 
-    The seed is accepted, recorded, and not used, because there is nothing here
-    for it to move: the TF-IDF counts are fixed by the corpus and lbfgs converges
-    to the same weights every time. That is the honest answer to "how much of
-    the gap is run-to-run noise" for this half of the comparison, and it is
-    worth recording three identical runs to show it rather than asserting it.
+    At the full fraction the seed is accepted, recorded, and not used, because
+    there is nothing here for it to move: the TF-IDF counts are fixed by the
+    corpus and lbfgs converges to the same weights every time. That is the
+    honest answer to "how much of the gap is run-to-run noise" for this half of
+    the comparison, and it is worth recording three identical runs to show it
+    rather than asserting it. Below the full fraction the seed does move
+    something real, because it chooses which papers the run is given.
     """
     from features import read_split, to_features
 
-    train_questions, y_train = read_split("train")
-    val_questions, y_val = read_split("val")
+    reduced = training_pool(fraction, seed)
+    train_questions, y_train = questions_and_chapters(reduced["train"])
+    val_questions, y_val = questions_and_chapters(reduced["val"])
     test_questions, y_test = read_split("test")
     question_vectoriser, chapter_classifier, seconds = fit_tfidf(
-        train_questions, y_train, val_questions, y_val, quiet=quiet)
+        train_questions, y_train, val_questions, y_val, quiet=quiet
+    )
     predicted = chapter_classifier.predict(
-        to_features(question_vectoriser, test_questions))
+        to_features(question_vectoriser, test_questions)
+    )
     return Run(
-        approach=APPROACH_ONE, seed=seed, predicted=[str(p) for p in predicted],
-        test_hash=split_hash(), test_rows=len(y_test), train_seconds=seconds,
-        parameters=int(chapter_classifier.coef_.size
-                       + chapter_classifier.intercept_.size),
+        approach=APPROACH_ONE,
+        seed=seed,
+        predicted=[str(p) for p in predicted],
+        test_hash=split_hash(),
+        test_rows=len(y_test),
+        train_seconds=seconds,
+        parameters=int(
+            chapter_classifier.coef_.size + chapter_classifier.intercept_.size
+        ),
         features=len(question_vectoriser.vocabulary_),
-        hardware=hardware_description("CPU"), recorded=_now(),
+        hardware=hardware_description("CPU"),
+        recorded=_now(),
+        fraction=float(fraction),
+        train_rows=pool_rows(reduced),
     )
 
 
@@ -214,10 +308,14 @@ def resplit_tfidf(rows, seed):
     which is the noise a confidence interval is only estimating.
     """
     from features import normalise_question, to_features
-    from split import (DEFAULT_MIN_TEST_ROWS, assign_groups_to_splits,
-                       check_every_chapter_has_test_rows,
-                       check_no_group_straddles_splits, check_rows_conserved,
-                       check_split_is_reproducible)
+    from split import (
+        DEFAULT_MIN_TEST_ROWS,
+        assign_groups_to_splits,
+        check_every_chapter_has_test_rows,
+        check_no_group_straddles_splits,
+        check_rows_conserved,
+        check_split_is_reproducible,
+    )
 
     split_rows = assign_groups_to_splits(rows, seed, DEFAULT_MIN_TEST_ROWS)
     check_no_group_straddles_splits(split_rows)
@@ -232,10 +330,15 @@ def resplit_tfidf(rows, seed):
         return [row["chapter"] for row in split_rows[split_name]]
 
     question_vectoriser, chapter_classifier, _ = fit_tfidf(
-        questions("train"), chapters("train"),
-        questions("val"), chapters("val"), quiet=True)
+        questions("train"),
+        chapters("train"),
+        questions("val"),
+        chapters("val"),
+        quiet=True,
+    )
     predicted = chapter_classifier.predict(
-        to_features(question_vectoriser, questions("test")))
+        to_features(question_vectoriser, questions("test"))
+    )
     y_test = chapters("test")
     return sum(t == p for t, p in zip(y_test, predicted)), len(y_test)
 
@@ -243,25 +346,37 @@ def resplit_tfidf(rows, seed):
 # ---------------------------------------------------------------------------
 # Approach 2
 
-def run_transformer(seed=42, use_class_weights=True, max_tokens=None):
+
+def run_transformer(seed=42, use_class_weights=True, max_tokens=None, fraction=FULL):
     """Fine-tune DistilBERT from scratch on the frozen split and score the test rows.
 
     torch is imported here rather than at the top so that the ledger and the
     baseline can be used on a machine without it.
     """
     import torch
+
     from evaluate_transformer import predict_chapters
     from features import read_split
-    from train_transformer import (MAX_TOKENS, encode, fit_on_the_full_dataset,
-                                   pick_device)
+    from train_transformer import (
+        MAX_TOKENS,
+        encode,
+        fit_on_the_full_dataset,
+        pick_device,
+    )
 
     if max_tokens is None:
         max_tokens = MAX_TOKENS
+    reduced = training_pool(fraction, seed)
     device = pick_device()
     started = time.perf_counter()
     question_tokeniser, chapter_transformer = fit_on_the_full_dataset(
-        device, use_class_weights=use_class_weights, max_tokens=max_tokens,
-        seed=seed)
+        device,
+        use_class_weights=use_class_weights,
+        max_tokens=max_tokens,
+        seed=seed,
+        train_data=questions_and_chapters(reduced["train"]),
+        val_data=questions_and_chapters(reduced["val"]),
+    )
     seconds = time.perf_counter() - started
 
     test_questions, y_test = read_split("test")
@@ -276,21 +391,49 @@ def run_transformer(seed=42, use_class_weights=True, max_tokens=None):
         torch.mps.empty_cache()
 
     return Run(
-        approach=APPROACH_TWO, seed=seed, predicted=list(predicted),
-        test_hash=split_hash(), test_rows=len(y_test), train_seconds=seconds,
-        parameters=int(parameters), features=None,
-        hardware=hardware_description(device.type.upper()), recorded=_now(),
-        conditions={"class_weights": bool(use_class_weights),
-                    "max_tokens": int(max_tokens)},
+        approach=APPROACH_TWO,
+        seed=seed,
+        predicted=list(predicted),
+        test_hash=split_hash(),
+        test_rows=len(y_test),
+        train_seconds=seconds,
+        parameters=int(parameters),
+        features=None,
+        hardware=hardware_description(device.type.upper()),
+        recorded=_now(),
+        conditions={
+            "class_weights": bool(use_class_weights),
+            "max_tokens": int(max_tokens),
+        },
+        fraction=float(fraction),
+        train_rows=pool_rows(reduced),
     )
 
 
 # ---------------------------------------------------------------------------
 # The ledger
 
+
+def same_fraction(one, two):
+    """Fractions compared as the floats they are, not with ==."""
+    return abs(float(one) - float(two)) < 1e-9
+
+
+def fraction_tag(fraction):
+    """The filename suffix for a subsampled run, empty for a whole-data one.
+
+    Whole-data records keep the name they have always had, so the runs already
+    in the ledger stay the 100% points of the curve rather than being re-earned.
+    """
+    return "" if same_fraction(fraction, FULL) else f"-f{round(fraction * 100):d}"
+
+
 def record_path(run, runs_dir=None):
-    return ((runs_dir or RUNS_DIR)
-            / f"{run.approach}-seed{run.seed}-{run.test_hash}.json")
+    return (
+        (runs_dir or RUNS_DIR)
+        / f"{run.approach}-seed{run.seed}{fraction_tag(run.fraction)}"
+        f"-{run.test_hash}.json"
+    )
 
 
 def record_run(run, runs_dir=None):
@@ -312,8 +455,7 @@ def read_record(path):
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as problem:
-        print(f"ignoring ledger record {path}: unreadable ({problem})",
-              file=sys.stderr)
+        print(f"ignoring ledger record {path}: unreadable ({problem})", file=sys.stderr)
         return None
     if not isinstance(record, dict):
         print(f"ignoring ledger record {path}: not a run record", file=sys.stderr)
@@ -321,17 +463,22 @@ def read_record(path):
     try:
         return Run(**record)
     except TypeError as problem:
-        print(f"ignoring ledger record {path}: written under another schema "
-              f"({problem})", file=sys.stderr)
+        print(
+            f"ignoring ledger record {path}: written under another schema ({problem})",
+            file=sys.stderr,
+        )
         return None
 
 
-def load_runs(approach, test_hash=None, conditions=_DEFAULT, runs_dir=None):
+def load_runs(
+    approach, test_hash=None, conditions=_DEFAULT, runs_dir=None, *, fraction=FULL
+):
     """Every recorded run of one approach against the current test split.
 
-    Records made against another split, or under other conditions, are left out
-    without comment; the caller sees only runs that can be compared. Pass
-    conditions=None to filter on the split alone.
+    Records made against another split, under other conditions, or on another
+    fraction of the training pool are left out without comment; the caller sees
+    only runs that can be compared. Pass conditions=None to filter on the split
+    alone, and fraction=None to take every fraction.
     """
     if test_hash is None:
         test_hash = split_hash()
@@ -345,6 +492,8 @@ def load_runs(approach, test_hash=None, conditions=_DEFAULT, runs_dir=None):
         if run.test_hash != test_hash:
             continue
         if conditions is not None and run.conditions != conditions:
+            continue
+        if fraction is not None and not same_fraction(run.fraction, fraction):
             continue
         runs.append(run)
     runs.sort(key=lambda run: run.seed)
