@@ -127,6 +127,21 @@ def paired_last_step(y_true, measured):
     return rows
 
 
+def seed_sets_match(measured):
+    return len({frozenset(point["runs"]) for point in measured}) <= 1
+
+
+def seed_coverage(measured):
+    def names(seeds):
+        return seed_list(seeds) if seeds else "none"
+
+    return "; ".join(
+        f"{point['fraction']:.0%}: {len(point['seeds'])} "
+        f"{'run' if len(point['seeds']) == 1 else 'runs'} at seeds "
+        f"{names(point['seeds'])}"
+        for point in measured)
+
+
 def shape(measured, pairs):
     """Climbing, flat or mixed at the last point, by the rule fixed above.
 
@@ -140,6 +155,22 @@ def shape(measured, pairs):
             "**The shape of this curve is not measurable yet.** The ledger "
             "holds one point against the current test split, and a shape needs "
             "at least two.")
+    if not seed_sets_match(measured):
+        last_seeds = set(measured[-2]["runs"]) & set(measured[-1]["runs"])
+        if not last_seeds:
+            reason = ("The last two measured points have no common seed, so "
+                      "their paired comparison cannot be made.")
+        else:
+            reason = ("The measured points do not use one common seed set, so "
+                      "their shape comparison would be incomplete.")
+        return "incomplete", (
+            f"**The shape of this curve is not measurable yet.** {reason} "
+            f"Seed coverage is {seed_coverage(measured)}.")
+    if not pairs:
+        return "incomplete", (
+            "**The shape of this curve is not measurable yet.** The last two "
+            "measured points have no common seed, so their paired comparison "
+            "cannot be made.")
     first, last = measured[0], measured[-1]
     total_gain = last["mean"] - first["mean"]
     step = last["mean"] - measured[-2]["mean"]
@@ -189,6 +220,14 @@ def shape(measured, pairs):
 
 def curves_differ(one, two):
     """Whether the two approaches' curves have the same shape, and how they differ."""
+    if not seed_sets_match(one) or not seed_sets_match(two):
+        return ("The comparison of the two curves is incomplete because the "
+                "measured points do not use one common set of seeds at every "
+                "fraction.")
+    if frozenset(one[0]["runs"]) != frozenset(two[0]["runs"]):
+        return ("The comparison of the two curves is incomplete because the "
+                "approaches were not measured at the same seeds at every "
+                "fraction.")
     one_gain = one[-1]["mean"] - one[0]["mean"]
     two_gain = two[-1]["mean"] - two[0]["mean"]
     difference = two_gain - one_gain
@@ -199,11 +238,13 @@ def curves_differ(one, two):
                 f"measured: {points(one_gain, signed=True)} for Approach 1 "
                 f"against {points(two_gain, signed=True)} for Approach 2. "
                 f"Neither approach is the one waiting on more data.")
+    seed_count = {1: "one", 2: "two", 3: "three"}.get(
+        len(one[0]["seeds"]), str(len(one[0]["seeds"])))
     return (f"The two curves are not the same shape. Over the range measured "
             f"Approach 1 gains {points(one_gain, signed=True)} and Approach 2 "
             f"{points(two_gain, signed=True)}, so {steeper} is the one that "
             f"benefits more from data, by {points(abs(difference))}. That "
-            f"comparison is between two means of three seeds each on 246 test "
+            f"comparison is between two means of {seed_count} seeds each on 246 test "
             f"questions, so it is a difference in slope worth naming rather "
             f"than a precise measurement of one.")
 
@@ -281,8 +322,11 @@ def approach_section(approach, measured, missing, pairs):
             f"`python3 tools/learning_curve.py --approach {approach} --record` "
             f"puts it back."]
     lines += [
-        f"Runs at seeds {seed_list(measured[0]['seeds'])}, each point a "
-        f"from-scratch run on that fraction of the training pool.",
+        (f"Runs at seeds {seed_list(measured[0]['seeds'])}, each point a "
+         f"from-scratch run on that fraction of the training pool."
+         if seed_sets_match(measured) else
+         f"Runs at these seeds by fraction: {seed_coverage(measured)}. Each "
+         f"point is a from-scratch run on that fraction of the training pool."),
         "",
         curve_table(measured),
         "",

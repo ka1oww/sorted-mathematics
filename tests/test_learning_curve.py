@@ -22,6 +22,11 @@ from chapters import CHAPTER_SLUGS
 from paths import PROJECT_ROOT
 from split import leakage_group_key
 
+try:
+    from tools import report_learning_curve
+except ModuleNotFoundError:
+    report_learning_curve = None
+
 FIXTURE_SEED = 20260907
 SCHOOLS = ("ABCJC", "BCDJC", "CDEJC", "DEFJC", "EFGJC", "FGHJC", "GHIJC")
 YEARS = (2021, 2022, 2023, 2024)
@@ -245,6 +250,41 @@ class LedgerFractionTests(unittest.TestCase):
         loaded = self.load()
         self.assertEqual([run.fraction for run in loaded], [learning_curve.FULL])
         self.assertIsNone(loaded[0].train_rows)
+
+    def test_runs_dir_keeps_its_historical_positional_slot(self):
+        self.assertEqual(
+            runs.load_runs(runs.APPROACH_ONE, self.CURRENT,
+                           runs.default_conditions(), self.runs_dir), [])
+
+
+@unittest.skipUnless(report_learning_curve, "report dependencies unavailable")
+class ReportSeedCoverageTests(unittest.TestCase):
+
+    @staticmethod
+    def point(fraction, seeds, mean=0.5):
+        return {"fraction": fraction, "seeds": list(seeds),
+                "runs": {seed: object() for seed in seeds}, "mean": mean}
+
+    def test_shape_reports_no_common_seed_as_incomplete(self):
+        measured = [self.point(0.5, (42,)), self.point(1.0, (43,))]
+        verdict, sentence = report_learning_curve.shape(measured, [])
+        self.assertEqual(verdict, "incomplete")
+        self.assertIn("no common seed", sentence)
+
+    def test_shape_reports_mismatched_seed_sets_as_incomplete(self):
+        measured = [self.point(0.25, (42, 43)),
+                    self.point(0.5, (42, 43)),
+                    self.point(1.0, (42,))]
+        verdict, sentence = report_learning_curve.shape(
+            measured, [{"p": 1.0, "difference": 0.0}])
+        self.assertEqual(verdict, "incomplete")
+        self.assertIn("one common seed set", sentence)
+        self.assertIn("100%: 1 run at seeds 42", sentence)
+
+    def test_curve_comparison_reports_mismatched_seed_sets_as_incomplete(self):
+        one = [self.point(0.5, (42, 43)), self.point(1.0, (42, 43))]
+        two = [self.point(0.5, (42,)), self.point(1.0, (42,))]
+        self.assertIn("incomplete", report_learning_curve.curves_differ(one, two))
 
 
 if __name__ == "__main__":

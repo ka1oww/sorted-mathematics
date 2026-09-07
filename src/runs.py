@@ -409,8 +409,8 @@ def read_record(path):
         return None
 
 
-def load_runs(approach, test_hash=None, conditions=_DEFAULT, fraction=FULL,
-              runs_dir=None):
+def load_runs(approach, test_hash=None, conditions=_DEFAULT, runs_dir=None,
+              *, fraction=FULL):
     """Every recorded run of one approach against the current test split.
 
     Records made against another split, under other conditions, or on another
