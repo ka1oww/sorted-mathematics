@@ -14,6 +14,9 @@ jobs:
         with:
           python-version: "3.12"
       # The tests run on synthetic fixtures, so neither the private corpus nor
-      # any of the modelling dependencies are needed here.
-      - run: pip install pytest
+      # any of the modelling dependencies are needed here. pymupdf is not a
+      # modelling dependency: it is the page reader's only one, and the reader
+      # tests build their own PDFs. The reader's OCR path is not installed, so
+      # the scan tests skip; see the OCR notes in AGENTS.md.
+      - run: pip install pytest pymupdf
       - run: python -m pytest -q

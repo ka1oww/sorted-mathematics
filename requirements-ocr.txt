@@ -1,0 +1,14 @@
+# The scan path only. `read_paper` needs nothing here on a paper that has a text
+# layer, and these imports are deferred so a text-layer-only install keeps
+# working without them. Install into a separate Python 3.12 virtual environment:
+#
+#     uv venv --python 3.12 .venv-ocr
+#     uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt
+#
+# These are the versions the rung-2 numbers were measured at. The install traps
+# are written up in CLAUDE.md; read them rather than rediscovering them.
+pymupdf==1.28.2
+python-doctr==1.1.0
+torch==2.14.0
+torchvision==0.29.0
+opencv-python==5.0.0.93

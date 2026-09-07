@@ -1,0 +1,79 @@
+{
+ "seab-p1-raster": {
+  "pdf": "proxies/seab-p1-clean.pdf",
+  "label": "SEAB 9758 Specimen 2025 Paper 1, rasterised at 200 dpi as an image-only PDF",
+  "build": {
+   "source": "seab-9758-specimen-2025.pdf",
+   "pages": [1, 2, 3, 4, 5],
+   "dpi": 200,
+   "skew": 0.0,
+   "noise": 0.0,
+   "quality": 95
+  },
+  "note": "no public paper is a scan, so the scan path is measured against a proxy. Proxy page i is source page build.pages[i], so the labels below are the seab-p1 labels renumbered from zero.",
+  "questions": [
+   {"n": 1, "pages": [0]},
+   {"n": 2, "pages": [0]},
+   {"n": 3, "pages": [0]},
+   {"n": 4, "pages": [0]},
+   {"n": 5, "pages": [0]},
+   {"n": 6, "pages": [1]},
+   {"n": 7, "pages": [1]},
+   {"n": 8, "pages": [2]},
+   {"n": 9, "pages": [2]},
+   {"n": 10, "pages": [3]},
+   {"n": 11, "pages": [3]}
+  ]
+ },
+ "seab-p1-skewed": {
+  "pdf": "proxies/seab-p1-skewed.pdf",
+  "label": "the same pages rotated 0.7 degrees, speckled and re-encoded at JPEG 60",
+  "build": {
+   "source": "seab-9758-specimen-2025.pdf",
+   "pages": [1, 2, 3, 4, 5],
+   "dpi": 200,
+   "skew": 0.7,
+   "noise": 6.0,
+   "quality": 60
+  },
+  "note": "the harshest scan a clean source can be made to produce, and what skewed_column was fitted against. Without the fit this paper scores 3/11.",
+  "questions": [
+   {"n": 1, "pages": [0]},
+   {"n": 2, "pages": [0]},
+   {"n": 3, "pages": [0]},
+   {"n": 4, "pages": [0]},
+   {"n": 5, "pages": [0]},
+   {"n": 6, "pages": [1]},
+   {"n": 7, "pages": [1]},
+   {"n": 8, "pages": [2]},
+   {"n": 9, "pages": [2]},
+   {"n": 10, "pages": [3]},
+   {"n": 11, "pages": [3]}
+  ]
+ },
+ "seab-p2-raster": {
+  "pdf": "proxies/seab-p2-clean.pdf",
+  "label": "SEAB 9758 Specimen 2025 Paper 2, rasterised at 200 dpi",
+  "build": {
+   "source": "seab-9758-specimen-2025.pdf",
+   "pages": [16, 17, 18, 19, 20, 21, 22],
+   "dpi": 200,
+   "skew": 0.0,
+   "noise": 0.0,
+   "quality": 95
+  },
+  "note": "proxy page i is source page build.pages[i]; the seab-p2 labels renumbered from zero.",
+  "questions": [
+   {"n": 1, "pages": [0]},
+   {"n": 2, "pages": [0]},
+   {"n": 3, "pages": [1]},
+   {"n": 4, "pages": [1]},
+   {"n": 5, "pages": [2]},
+   {"n": 6, "pages": [2]},
+   {"n": 7, "pages": [3]},
+   {"n": 8, "pages": [3]},
+   {"n": 9, "pages": [4]},
+   {"n": 10, "pages": [5]}
+  ]
+ }
+}

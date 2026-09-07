@@ -42,6 +42,33 @@ candidates and their confidences when it declines:
 python3 src/predict.py --min-confidence 0.50 "your question here"
 ```
 
+Or hand it a whole exam paper and it cuts the paper into questions first:
+
+```
+python3 src/predict.py --pdf paper.pdf
+```
+
+```
+Q 1  pages=[1]   <the question's opening words>  ->  DIFFERENTIATION AND ITS APPLICATIONS 39%
+Q 7  pages=[2]   <the question's opening words>  ->  COMPLEX NUMBERS 53%
+Q10  pages=[4]   <the question's opening words>  ->  VECTORS 2 63%
+Q11  pages=[4]   <the question's opening words>  ->  DIFFERENTIAL EQUATIONS 36%
+```
+
+The confidences above are the real ones from the SEAB 9758 specimen paper; the
+question text is elided because exam questions do not go in this repository.
+
+That reading step is `src/reader.py`, and it has no model in it. A question opens
+with a number sitting in the question column and the numbers ascend; the column
+is learnt from the document rather than assumed. On four public papers from two
+examination boards it finds 43 of 43 questions, invents no boundaries, and gets
+all 43 page sets exactly right, including the six questions that run across a
+page break. A paper with no text layer is sent through OCR instead and read by
+the same rule, which scores 32 of 32 on rasterised proxies, including one rotated
+0.7 degrees and re-encoded at JPEG 60. The reader refuses to emit a paper its
+confidence signals do not trust, because a quietly mis-cut paper poisons
+everything downstream.
+
 The trained classifier is committed, so that runs from a clone. The corpus
 behind it does not ship. It is past-year exam material, so the questions
 themselves stay off this repository, which means the extractors, `src/merge.py`,
@@ -235,17 +262,28 @@ src/evaluate_transformer.py  Approach 2 measurement, same report shape
 src/runs.py                one from-scratch run of either approach, and the ledger
 src/intervals.py           confidence intervals and the paired test, pure Python
 src/learning_curve.py      group-aware training-pool subsampling
-src/predict.py             the command-line demo, with an optional refusal cutoff
+src/reader.py              read_paper(): a PDF in, questions with page spans out
+src/question_rule.py       the one rule both rungs run
+src/page_lines.py          lines from the PDF text layer
+src/page_ocr.py            lines from OCR, for papers with no text layer
+src/predict.py             the command-line demo, paper-to-chapters path and optional refusal cutoff
 src/abstention.py          the refusal option: cutoffs over the pipeline's own confidence
 src/chapters.py            the 21 chapters
 src/paths.py               where things live, and the one write guard
 tests/test_split.py        33 tests, mostly about leakage
 tests/test_merge.py        2 tests, about deduplication
 tests/test_intervals.py    22 tests, about the statistics
+tests/test_question_rule.py  22 tests, about where a question begins and ends
+tests/test_reader.py       23 tests, about rung choice and failing loudly
+tests/test_public_papers.py  the 43-question regression, public papers
+tests/test_scan_path.py    the OCR path, against rasterised proxies
 tools/                     one-off measurements, not part of the pipeline
 tools/compare_runs.py      the seed runs both approaches are measured by
 tools/learning_curve.py    records fractional training-pool runs
 tools/report_results.py    writes RESULTS.md, the confusion matrices and the abstention curve
 tools/report_learning_curve.py  writes LEARNING-CURVE.md and its plot
 tools/report_abstention.py  sweeps the abstention cutoff and draws its curve
+tools/score_reader.py      found, spurious and exact pages, never averaged
+tools/label_paper.py       a labelling skeleton for a new yardstick paper
+tools/make_scan_proxy.py   manufactures a scan from a digital paper
 ```
