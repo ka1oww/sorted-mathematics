@@ -165,14 +165,20 @@ def fine_tune(train_dataset, epochs, device, validation_dataset=None,
 
 
 def fit_on_the_full_dataset(device, use_class_weights=True,
-                            max_tokens=MAX_TOKENS, seed=SEED):
+                            max_tokens=MAX_TOKENS, seed=SEED,
+                            train_data=None, val_data=None):
     """Tune the epoch count on validation, then refit on training plus validation.
 
     Returns the tokeniser and the fitted model. main saves them. The seed and
     truncation runs in tools/ read the accuracy and throw the model away.
+
+    train_data and val_data are (questions, chapters) pairs, and default to the
+    whole of each split. The learning-curve runs in tools/learning_curve.py pass
+    a group-aware fraction of them instead; nothing below this line can tell the
+    difference, which is the point. The test split is not read here at all.
     """
-    train_questions, train_chapters = read_split("train")
-    val_questions, val_chapters = read_split("val")
+    train_questions, train_chapters = train_data or read_split("train")
+    val_questions, val_chapters = val_data or read_split("val")
 
     question_tokeniser = AutoTokenizer.from_pretrained(BASE_MODEL)
     train_dataset = encode(question_tokeniser, train_questions, train_chapters,
