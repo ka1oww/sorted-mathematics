@@ -27,7 +27,48 @@ in 1.6 seconds against 15 minutes for the transformer, with 10,884 features
 against 67 million parameters, and it can show you the words behind every
 decision.
 
-## Running it
+## MCP server
+
+The local MCP server is the supported path from a clone to a client. It never
+ships a classifier, policy sidecar, corpus, or paper. Put the classifier and
+its matching policy sidecar outside this repository, on the same trusted
+machine. The sidecar binds the calibrated cutoff to the exact model hash and
+validation-split hash; create it from the trusted machine's aggregate
+abstention report with `tools/export_runtime_policy.py`.
+
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-mcp.txt
+# Optional, only for image-only PDFs:
+pip install -r requirements-ocr.txt
+```
+
+Then replace every absolute-path placeholder in this client configuration:
+
+```json
+{
+  "mcpServers": {
+    "sorted-mathematics": {
+      "command": "/ABSOLUTE/PATH/TO/sorted-mathematics/.venv/bin/python",
+      "args": ["/ABSOLUTE/PATH/TO/sorted-mathematics/src/mcp_server.py"],
+      "cwd": "/ABSOLUTE/PATH/TO/sorted-mathematics",
+      "env": {
+        "SORTED_MATH_MODEL_PATH": "/ABSOLUTE/LOCAL/PATH/chapter_classifier.joblib",
+        "SORTED_MATH_POLICY_PATH": "/ABSOLUTE/LOCAL/PATH/chapter_classifier.policy.json"
+      }
+    }
+  }
+}
+```
+
+Stdio clients use a restricted environment, so both variables belong in this
+client configuration rather than being assumed inherited. The server exposes
+`classify_question`, `read_paper`, and the `sorted-mathematics://chapters`
+resource. `read_paper` returns question numbers and zero-based page spans only;
+it never sends extracted question text across MCP.
+
+## Command-line demo
 
 ```
 pip install -r requirements.txt
@@ -81,13 +122,13 @@ uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt
 The OCR imports are lazy, so the usual text-layer workflow does not need this
 extra environment.
 
-The trained classifier is committed, so that runs from a clone. The corpus
-behind it does not ship. It is past-year exam material, so the questions
-themselves stay off this repository, which means the extractors, `src/merge.py`,
-`src/split.py` and `src/train.py` have nothing to read from a clone. The tests
-need none of it: ordinary fixtures are built synthetically. The optional
-public-paper regression needs separately supplied, non-committed PDFs; see
-[`tests/public_papers.py`](tests/public_papers.py).
+The trained classifier is local-only, as is its model-matched runtime-policy
+sidecar. The corpus behind it does not ship. It is past-year exam material, so
+the questions themselves stay off this repository, which means the extractors,
+`src/merge.py`, `src/split.py` and `src/train.py` have nothing to read from a
+clone. The tests need none of it: ordinary fixtures are built synthetically.
+The optional public-paper regression needs separately supplied, non-committed
+PDFs; see [`tests/public_papers.py`](tests/public_papers.py).
 
 ```
 python3 -m pytest
