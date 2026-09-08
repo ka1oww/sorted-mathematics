@@ -318,16 +318,6 @@ def abstention_section(built):
     return lines
 
 
-def abstention_not_measurable_section(reason):
-    return [
-        "## When the classifier declines to answer",
-        "",
-        "**Abstention is not measurable.**",
-        "",
-        str(reason),
-    ]
-
-
 def main():
     assert_inside_project(DOCS_DIR)
     DOCS_DIR.mkdir(parents=True, exist_ok=True)

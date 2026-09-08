@@ -43,12 +43,12 @@ sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 from report_abstention import (  # noqa: E402
     ABSTENTION_FIGURE,
     RefitPredictionMismatch,
-    abstention_not_measurable_section,
     abstention_section,
     build_abstention,
     draw_abstention_curve,
 )
 
+from abstention import abstention_not_measurable_section  # noqa: E402
 from chapters import CHAPTERS, CHAPTER_SLUGS  # noqa: E402
 from features import read_split, to_features  # noqa: E402
 from intervals import (intervals_overlap, mcnemar_exact_p,  # noqa: E402

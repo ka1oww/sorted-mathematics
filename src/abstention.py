@@ -37,6 +37,16 @@ RELIABILITY_BINS = 10
 CALIBRATION_TOLERANCE = 0.05
 
 
+def abstention_not_measurable_section(reason):
+    return [
+        "## When the classifier declines to answer",
+        "",
+        "**Abstention is not measurable.**",
+        "",
+        str(reason),
+    ]
+
+
 def sweep_points(y_true, predicted, confidences, thresholds=SWEEP_THRESHOLDS):
     """One row per threshold: what is answered, and what it costs and buys.
 
