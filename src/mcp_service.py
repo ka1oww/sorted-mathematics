@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, TypedDict
 
 import joblib
 import pymupdf
@@ -26,7 +26,6 @@ POLICY_SCHEMA_VERSION = 1
 SELECTION_RULE = (
     "lowest validation threshold reaching 0.95 selective accuracy, else 0.00"
 )
-DISCLOSURE_MODE: Literal["pointers", "text"] = "pointers"
 
 
 class ChapterItem(TypedDict):
@@ -56,11 +55,10 @@ class PaperQuestion(TypedDict):
     number: int
     start_page: int
     pages: list[int]
-    text: NotRequired[str]
 
 
 class PaperResult(TypedDict):
-    disclosure_mode: Literal["pointers", "text"]
+    disclosure_mode: Literal["pointers"]
     questions: list[PaperQuestion]
     reader: dict[str, object]
 
@@ -92,22 +90,13 @@ CLASSIFY_QUESTION_DOC = (
 )
 
 
-def _read_paper_doc() -> str:
-    disclosure = (
-        "Returned items contain pointers only (number and zero-based page "
-        "span), not question text."
-        if DISCLOSURE_MODE == "pointers"
-        else "Returned items include extracted question text."
-    )
-    return (
-        "Discover numbered questions and zero-based page spans in one local PDF. "
-        "It automatically uses the PDF text layer or optional OCR and fails "
-        "rather than emitting an untrusted cut. It does not classify chapters. "
-        + disclosure
-    )
-
-
-READ_PAPER_DOC = _read_paper_doc()
+READ_PAPER_DOC = (
+    "Discover numbered questions and zero-based page spans in one local PDF. "
+    "It automatically uses the PDF text layer or optional OCR and fails "
+    "rather than emitting an untrusted cut. It does not classify chapters. "
+    "Returned items contain pointers only (number and zero-based page span), "
+    "not question text."
+)
 
 
 def _environment_path(name: str) -> Path | None:
@@ -243,14 +232,11 @@ def _safe_reader_report(report: dict[str, object]) -> dict[str, object]:
 
 
 def _project_question(question: dict[str, object]) -> PaperQuestion:
-    base: PaperQuestion = {
+    return {
         "number": int(question["number"]),
         "start_page": int(question["start_page"]),
         "pages": [int(page) for page in question["pages"]],
     }
-    if DISCLOSURE_MODE == "text":
-        base["text"] = str(question["text"])
-    return base
 
 
 def _validate_pdf_path(pdf_path: str) -> Path:
@@ -286,7 +272,7 @@ def read_paper_payload(pdf_path: str) -> PaperResult:
     except (OSError, pymupdf.FileDataError, RuntimeError) as error:
         raise ServiceError("paper_unreadable", "The requested PDF could not be read.") from error
     return {
-        "disclosure_mode": DISCLOSURE_MODE,
+        "disclosure_mode": "pointers",
         "questions": [_project_question(question) for question in questions],
         "reader": _safe_reader_report(report),
     }

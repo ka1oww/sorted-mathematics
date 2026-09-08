@@ -70,6 +70,10 @@ it never sends extracted question text across MCP.
 
 ## Command-line demo
 
+The demo needs a trained model at `models/chapter_classifier.joblib`. No model
+ships with the repository, so train one locally first (which needs the private
+corpus) or supply your own:
+
 ```
 pip install -r requirements.txt
 python3 src/predict.py "your question here"
@@ -250,8 +254,10 @@ Both rows regenerate from the run ledger in `data/private/runs/`, which
 `tools/compare_runs.py seeds --record` fills and `tools/report_results.py`
 reads. Every record carries the hash of the test split it was scored on, so a
 model that outlives its split cannot put a training-set score into the table.
-The transformer itself is 268 MB and is not committed; Approach 1's model is,
-and its predictions match its ledger runs exactly.
+Neither model is committed: the transformer is 268 MB, and Approach 1's
+`models/chapter_classifier.joblib` stays local like every other private
+artifact. `python3 src/train.py` refits it, and its predictions match its
+ledger runs exactly.
 
 ## What each model gets wrong
 

@@ -86,7 +86,7 @@ A different draw of test papers moves the accuracy by 1.3 points on its own, bef
 
 ## Confusion matrices
 
-Approach 1's matrix is drawn from the committed `models/chapter_classifier.joblib`, whose predictions match the three ledger runs exactly.
+Approach 1's matrix is drawn from the locally trained `models/chapter_classifier.joblib`, whose predictions match the three ledger runs exactly.
 
 Approach 2's is drawn from its seed 42 run, so that both matrices show one model's mistakes.
 

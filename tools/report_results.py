@@ -12,7 +12,7 @@ neither side is a single draw. Every accuracy carries a 95% interval, both
 models' predictions on the same 246 questions are put through an exact paired
 test, and the verdict paragraph is chosen by a rule fixed in this file, not
 typed after the numbers were seen. Both sides of that paired test are ledger
-runs, so both were scored against the split the hash names; the committed
+runs, so both were scored against the split the hash names; the locally trained
 models/chapter_classifier.joblib supplies only Approach 1's pictures and tables,
 and the report says whether it still reproduces the ledger runs. Approach 2 is
 included only if the ledger holds transformer runs against the current test
@@ -141,7 +141,7 @@ def dataset_fingerprint():
 
 
 def approach_one_predictions():
-    """The committed model's test predictions, for the matrices and tables only.
+    """The local model's test predictions, for the matrices and tables only.
 
     The headline, the paired test and the verdict all come from the ledger
     instead; see main().
@@ -582,7 +582,7 @@ def main():
     two = summarise_runs(y_true, two_runs) if two_runs else None
 
     # Both halves of the paired comparison come from the ledger, whose records
-    # are hash-bound to this test split. The committed joblib is not: it can
+    # are hash-bound to this test split. The local joblib is not: it can
     # outlive a resplit, and pairing against it would let a model that had
     # memorised today's test rows produce the verdict, which is exactly the leak
     # the hash guard exists to stop.
@@ -655,12 +655,12 @@ def main():
     sections += ["", "## Confusion matrices", ""]
     if committed_matches_ledger:
         sections.append(
-            "Approach 1's matrix is drawn from the committed "
+            "Approach 1's matrix is drawn from the locally trained "
             "`models/chapter_classifier.joblib`, whose predictions match the "
             "three ledger runs exactly.")
     else:
         sections.append(
-            "**The committed `models/chapter_classifier.joblib` does not "
+            "**The local `models/chapter_classifier.joblib` does not "
             "reproduce the ledger runs' predictions.** It is stale against the "
             "current split; `python3 src/train.py` refits it.")
     sections.append("")
