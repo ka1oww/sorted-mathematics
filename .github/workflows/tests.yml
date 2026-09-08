@@ -18,5 +18,5 @@ jobs:
       # modelling dependency: it is the page reader's only one, and the reader
       # tests build their own PDFs. The reader's OCR path is not installed, so
       # the scan tests skip; see the OCR notes in AGENTS.md.
-      - run: pip install pytest pymupdf
+      - run: pip install pytest PyMuPDF==1.28.2
       - run: python -m pytest -q
