@@ -10,9 +10,15 @@ import unittest
 import pymupdf
 
 import page_lines
-from reader import (MAXIMUM_PAGES_PER_QUESTION, PaperReadError, Question,
-                    choose_rung, confidence_report, read_paper,
-                    read_paper_with_report)
+from reader import (
+    MAXIMUM_PAGES_PER_QUESTION,
+    PaperReadError,
+    Question,
+    choose_rung,
+    confidence_report,
+    read_paper,
+    read_paper_with_report,
+)
 
 # Deliberately not exam phrasing. These build a synthetic paper whose shape the
 # rule can read; nothing here is, or resembles, a real question.
@@ -33,8 +39,9 @@ def write_paper(path, questions=QUESTIONS, per_page=1):
             y = 120.0
         page.insert_text((50.0, y), f"{index + 1}", fontsize=11)
         page.insert_text((90.0, y), text, fontsize=11)
-        page.insert_text((90.0, y + 20.0), "Delta echo foxtrot golf hotel.",
-                         fontsize=11)
+        page.insert_text(
+            (90.0, y + 20.0), "Delta echo foxtrot golf hotel.", fontsize=11
+        )
         y += 120.0
     document.save(str(path))
     document.close()
@@ -47,8 +54,9 @@ def write_image_only(source, destination):
     scanned = pymupdf.open()
     for index in range(original.page_count):
         pixmap = original[index].get_pixmap(dpi=120)
-        page = scanned.new_page(width=original[index].rect.width,
-                                height=original[index].rect.height)
+        page = scanned.new_page(
+            width=original[index].rect.width, height=original[index].rect.height
+        )
         page.insert_image(page.rect, pixmap=pixmap)
     scanned.save(str(destination))
     scanned.close()
@@ -57,9 +65,17 @@ def write_image_only(source, destination):
 
 
 def fake_questions(*specs):
-    return [Question({"number": number, "start_page": pages[0],
-                      "pages": list(pages), "text": "some text"})
-            for number, pages in specs]
+    return [
+        Question(
+            {
+                "number": number,
+                "start_page": pages[0],
+                "pages": list(pages),
+                "text": "some text",
+            }
+        )
+        for number, pages in specs
+    ]
 
 
 class RungSelection(unittest.TestCase):
@@ -90,9 +106,10 @@ class RungSelection(unittest.TestCase):
 
 
 class ScanDetection(unittest.TestCase):
-
     def setUp(self):
-        import tempfile, pathlib
+        import pathlib
+        import tempfile
+
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = pathlib.Path(self.directory.name)
@@ -109,10 +126,10 @@ class ScanDetection(unittest.TestCase):
         scanned = write_image_only(path, self.root / "scanned.pdf")
         document = page_lines.open_document(scanned)
         counts = page_lines.page_character_counts(
-            document, page_lines.all_pages(document))
+            document, page_lines.all_pages(document)
+        )
         document.close()
-        self.assertEqual(page_lines.scanned_pages(counts),
-                         sorted(counts))
+        self.assertEqual(page_lines.scanned_pages(counts), sorted(counts))
         self.assertEqual(choose_rung(counts), 2)
 
     def test_rung_one_forced_onto_a_scan_finds_nothing_and_says_so(self):
@@ -125,6 +142,7 @@ class ScanDetection(unittest.TestCase):
 
     def test_a_missing_ocr_stack_names_what_to_install(self):
         import page_ocr
+
         try:
             page_ocr._import_doctr()
         except page_ocr.OcrUnavailable as error:
@@ -141,28 +159,34 @@ class ConfidenceSignals(unittest.TestCase):
     """Fail loudly rather than quietly emit a mis-cut paper."""
 
     def test_a_complete_ascending_sequence_is_trusted(self):
-        report = confidence_report(fake_questions((1, [0]), (2, [1]), (3, [2])),
-                                   1, [0, 1, 2], 49.6, {0: 900, 1: 900, 2: 900})
+        report = confidence_report(
+            fake_questions((1, [0]), (2, [1]), (3, [2])),
+            1,
+            [0, 1, 2],
+            49.6,
+            {0: 900, 1: 900, 2: 900},
+        )
         self.assertTrue(report["trustworthy"])
         self.assertEqual(report["problems"], [])
 
     def test_a_gap_in_the_sequence_is_a_problem(self):
-        report = confidence_report(fake_questions((1, [0]), (2, [1]), (4, [3])),
-                                   1, [0, 1, 2, 3], 49.6, {})
+        report = confidence_report(
+            fake_questions((1, [0]), (2, [1]), (4, [3])), 1, [0, 1, 2, 3], 49.6, {}
+        )
         self.assertFalse(report["trustworthy"])
         self.assertEqual(report["missing_numbers"], [3])
 
     def test_a_question_claiming_too_many_pages_is_a_problem(self):
         swallowed = list(range(MAXIMUM_PAGES_PER_QUESTION + 1))
-        report = confidence_report(fake_questions((1, swallowed)), 1,
-                                   swallowed, 49.6, {})
+        report = confidence_report(
+            fake_questions((1, swallowed)), 1, swallowed, 49.6, {}
+        )
         self.assertFalse(report["trustworthy"])
         self.assertEqual(report["oversized_questions"][0]["number"], 1)
 
     def test_a_question_at_the_page_limit_is_allowed(self):
         allowed = list(range(MAXIMUM_PAGES_PER_QUESTION))
-        report = confidence_report(fake_questions((1, allowed)), 1,
-                                   allowed, 49.6, {})
+        report = confidence_report(fake_questions((1, allowed)), 1, allowed, 49.6, {})
         self.assertTrue(report["trustworthy"])
 
     def test_a_paper_with_no_questions_is_a_problem(self):
@@ -171,15 +195,15 @@ class ConfidenceSignals(unittest.TestCase):
         self.assertIn("no questions found", report["problems"])
 
     def test_a_question_with_no_text_is_a_problem(self):
-        empty = [Question({"number": 1, "start_page": 0, "pages": [0],
-                           "text": "   "})]
+        empty = [Question({"number": 1, "start_page": 0, "pages": [0], "text": "   "})]
         report = confidence_report(empty, 1, [0], 49.6, {})
         self.assertFalse(report["trustworthy"])
         self.assertEqual(report["empty_questions"], [1])
 
     def test_the_report_names_which_signal_failed(self):
-        report = confidence_report(fake_questions((1, [0]), (3, [2])), 1,
-                                   [0, 1, 2], 49.6, {})
+        report = confidence_report(
+            fake_questions((1, [0]), (3, [2])), 1, [0, 1, 2], 49.6, {}
+        )
         self.assertEqual(len(report["problems"]), 1)
         self.assertIn("sequence incomplete", report["problems"][0])
 
@@ -190,18 +214,21 @@ def write_prose(path):
     document = pymupdf.open()
     page = document.new_page()
     for offset in range(12):
-        page.insert_text((50.0, 120.0 + offset * 20.0),
-                         "Lorem ipsum with no numbering anywhere.",
-                         fontsize=11)
+        page.insert_text(
+            (50.0, 120.0 + offset * 20.0),
+            "Lorem ipsum with no numbering anywhere.",
+            fontsize=11,
+        )
     document.save(str(path))
     document.close()
     return path
 
 
 class LoudFailure(unittest.TestCase):
-
     def setUp(self):
-        import tempfile, pathlib
+        import pathlib
+        import tempfile
+
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = pathlib.Path(self.directory.name)
@@ -227,17 +254,17 @@ class LoudFailure(unittest.TestCase):
     def test_a_paper_that_only_half_reads_still_raises(self):
         # The dangerous case: enough questions found to look like a success.
         path = write_paper(self.root / "paper.pdf", QUESTIONS, per_page=1)
-        questions, report = read_paper_with_report(path, strict=False)
+        _questions, report = read_paper_with_report(path, strict=False)
         self.assertTrue(report["trustworthy"])
         with self.assertRaises(PaperReadError):
-            read_paper(path, pages=[1, 2])   # starts at question 2, so 1 is gone
+            read_paper(path, pages=[1, 2])  # starts at question 2, so 1 is gone
 
 
 class TheQuestionShape(unittest.TestCase):
-
     def test_a_question_reads_as_attributes_and_as_a_dict(self):
-        question = Question({"number": 7, "start_page": 3, "pages": [3, 4],
-                             "text": "some text"})
+        question = Question(
+            {"number": 7, "start_page": 3, "pages": [3, 4], "text": "some text"}
+        )
         self.assertEqual(question.number, 7)
         self.assertEqual(question.pages, [3, 4])
         self.assertEqual(question["pages"], [3, 4])
@@ -245,8 +272,10 @@ class TheQuestionShape(unittest.TestCase):
 
     def test_a_question_survives_json(self):
         import json
-        question = Question({"number": 7, "start_page": 3, "pages": [3, 4],
-                             "text": "some text"})
+
+        question = Question(
+            {"number": 7, "start_page": 3, "pages": [3, 4], "text": "some text"}
+        )
         self.assertEqual(json.loads(json.dumps(question))["number"], 7)
 
 

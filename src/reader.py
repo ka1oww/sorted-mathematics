@@ -5,8 +5,8 @@ Both rungs sit behind this one entry point.
   rung 1  the PDF text layer plus the plain rule in `question_rule`. Free,
           about 5 ms per page, and the rule that scored 43/43 questions with
           43/43 exact page sets over four papers from two boards.
-  rung 2  the same rule over lines OCR'd from the pixels, for papers with no
-          text layer, at about half a second per page.
+  rung 2  the same rule over lines OCR'd from the pixels, for papers mostly
+          without text layers, at about half a second per page.
 
 The rung is chosen automatically from how much text the pages carry, and it is
 chosen per *paper* rather than per page: rung 1 works in points and rung 2 in
@@ -68,8 +68,10 @@ class Question(dict):
         return self["text"]
 
     def __repr__(self):
-        return (f"Question(number={self.number}, pages={self.pages}, "
-                f"chars={len(self.text)})")
+        return (
+            f"Question(number={self.number}, pages={self.pages}, "
+            f"chars={len(self.text)})"
+        )
 
 
 def choose_rung(character_counts):
@@ -90,11 +92,14 @@ def confidence_report(questions, rung, page_indices, column, character_counts):
     highest = max(numbers) if numbers else 0
     missing = [n for n in range(1, highest + 1) if n not in numbers]
     duplicated = sorted({n for n in numbers if numbers.count(n) > 1})
-    oversized = [{"number": question["number"], "pages": question["pages"]}
-                 for question in questions
-                 if len(question["pages"]) > MAXIMUM_PAGES_PER_QUESTION]
-    empty = [question["number"] for question in questions
-             if not question["text"].strip()]
+    oversized = [
+        {"number": question["number"], "pages": question["pages"]}
+        for question in questions
+        if len(question["pages"]) > MAXIMUM_PAGES_PER_QUESTION
+    ]
+    empty = [
+        question["number"] for question in questions if not question["text"].strip()
+    ]
 
     problems = []
     if not questions:
@@ -104,9 +109,11 @@ def confidence_report(questions, rung, page_indices, column, character_counts):
     if duplicated:
         problems.append(f"question numbers repeat: {duplicated}")
     for question in oversized:
-        problems.append(f"question {question['number']} claims "
-                        f"{len(question['pages'])} pages {question['pages']}, "
-                        f"more than the {MAXIMUM_PAGES_PER_QUESTION} allowed")
+        problems.append(
+            f"question {question['number']} claims "
+            f"{len(question['pages'])} pages {question['pages']}, "
+            f"more than the {MAXIMUM_PAGES_PER_QUESTION} allowed"
+        )
     if empty:
         problems.append(f"questions with no text: {empty}")
 
@@ -147,8 +154,9 @@ def read_paper_with_report(path, pages=None, rung=None, strict=True):
     """`read_paper`, and the confidence report beside the questions."""
     document = page_lines.open_document(path)
     try:
-        page_indices = (list(pages) if pages is not None
-                        else page_lines.all_pages(document))
+        page_indices = (
+            list(pages) if pages is not None else page_lines.all_pages(document)
+        )
         counts = page_lines.page_character_counts(document, page_indices)
         chosen = rung if rung is not None else choose_rung(counts)
 
@@ -159,6 +167,7 @@ def read_paper_with_report(path, pages=None, rung=None, strict=True):
             skew_aware = False
         elif chosen == 2:
             import page_ocr
+
             rows = page_ocr.ocr_lines(document, page_indices)
             heights = {row["page_height"] for row in rows}
             top_margin = page_ocr.ocr_top_margin(max(heights)) if heights else 0.0
@@ -172,7 +181,8 @@ def read_paper_with_report(path, pages=None, rung=None, strict=True):
         document.close()
 
     found, column = question_rule.segment_lines(
-        rows, len(page_indices), top_margin, tolerance, skew_aware)
+        rows, len(page_indices), top_margin, tolerance, skew_aware
+    )
     questions = [Question(question) for question in found]
 
     report = confidence_report(questions, chosen, page_indices, column, counts)
@@ -180,5 +190,6 @@ def read_paper_with_report(path, pages=None, rung=None, strict=True):
         raise PaperReadError(
             f"{path}: refusing to emit a paper this reader does not trust - "
             + "; ".join(report["problems"]),
-            report)
+            report,
+        )
     return questions, report

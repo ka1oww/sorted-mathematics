@@ -1,4 +1,4 @@
-"""Rung 2: lines from pixels, for the pages that have no text layer.
+"""Rung 2: lines from pixels, for papers mostly without text layers.
 
 Rung 1 is provably inert on an image-only PDF - it extracts 0 characters and
 finds 0 questions - and that is the entire reason this module exists. What it
@@ -90,12 +90,18 @@ def ocr_lines(document, page_indices, dpi=RENDER_DPI):
                 text = " ".join(word.value for word in line.words)
                 if not text.strip():
                     continue
-                page_rows.append({
-                    "x0": round(x0 * width, 1), "y0": round(y0 * height, 1),
-                    "x1": round(x1 * width, 1), "y1": round(y1 * height, 1),
-                    "size": None, "text": text,
-                    "page": index, "page_height": heights.get(index, float(height)),
-                })
+                page_rows.append(
+                    {
+                        "x0": round(x0 * width, 1),
+                        "y0": round(y0 * height, 1),
+                        "x1": round(x1 * width, 1),
+                        "y1": round(y1 * height, 1),
+                        "size": None,
+                        "text": text,
+                        "page": index,
+                        "page_height": heights.get(index, float(height)),
+                    }
+                )
         page_rows.sort(key=lambda row: (round(row["y0"], 0), row["x0"]))
         rows.extend(page_rows)
     return rows

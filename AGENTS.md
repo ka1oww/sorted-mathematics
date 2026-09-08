@@ -83,7 +83,9 @@ the project is and DATA-PLAN.md is the data contract; neither is repeated here.
 
 ## Running things
 
-- Tests use synthetic fixtures only: `python3 -m pytest` needs no private data.
+- Tests need no private data: `python3 -m pytest` builds ordinary fixtures
+  synthetically, while public-paper tests skip unless their separately held PDFs
+  are supplied.
 - **Anything that trains needs the framework interpreter, not the one on PATH.**
   scikit-learn and torch are installed for
   `/Library/Frameworks/Python.framework/Versions/3.13/bin/python3`; the

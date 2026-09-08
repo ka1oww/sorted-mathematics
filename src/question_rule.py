@@ -37,7 +37,9 @@ STOP_LINE = re.compile(
     r"^(Section\s+[A-Z]\b"
     r"|BLANK PAGE"
     r"|Additional page"
-    r"|Permission to reproduce items)", re.IGNORECASE)
+    r"|Permission to reproduce items)",
+    re.IGNORECASE,
+)
 
 # The footer band as a fraction of page height. "[Turn over" sits a little above
 # the printed footer and is page furniture just the same.
@@ -72,8 +74,11 @@ def repeated_texts(rows, page_count, threshold=0.5):
     for row in rows:
         pages_with.setdefault(row["text"].strip(), set()).add(row["page"])
     floor = max(2, threshold * page_count)
-    return {text for text, pages in pages_with.items()
-            if len(text) >= 5 and len(pages) >= floor}
+    return {
+        text
+        for text, pages in pages_with.items()
+        if len(text) >= 5 and len(pages) >= floor
+    }
 
 
 def is_furniture(row, repeated, top_margin):
@@ -82,17 +87,15 @@ def is_furniture(row, repeated, top_margin):
     if not text:
         return True
     size = row.get("size")
-    if size is not None and size < MINIMUM_BODY_SIZE:      # barcodes, scan marks
+    if size is not None and size < MINIMUM_BODY_SIZE:  # barcodes, scan marks
         return True
-    if DOTTED.search(text):                                # write-on answer rules
+    if DOTTED.search(text):  # write-on answer rules
         return True
-    if row["y0"] < top_margin:                             # running header band
+    if row["y0"] < top_margin:  # running header band
         return True
-    if row["y0"] > row["page_height"] * FOOTER_FRACTION:   # footer band
+    if row["y0"] > row["page_height"] * FOOTER_FRACTION:  # footer band
         return True
-    if text in repeated:                                   # anything else repeated
-        return True
-    return False
+    return text in repeated  # anything else repeated
 
 
 def question_column(rows):
@@ -130,8 +133,10 @@ def skewed_column(rows, tolerance):
     covariance = sum((row["y0"] - mean_y) * (row["x0"] - mean_x) for row in band)
     slope = covariance / variance if variance else 0.0
     intercept = mean_x - slope * mean_y
-    return (lambda row: abs(row["x0"] - (slope * row["y0"] + intercept)) <= tolerance,
-            slope)
+    return (
+        lambda row: abs(row["x0"] - (slope * row["y0"] + intercept)) <= tolerance,
+        slope,
+    )
 
 
 def column_test(rows, tolerance, skew_aware):
@@ -160,8 +165,9 @@ def find_markers(body, in_column):
             continue
         match = MARKER.match(text)
         if match and int(match.group(1)) == expected:
-            markers.append((row["page"], row["y0"], expected,
-                            match.group(2).strip(), index))
+            markers.append(
+                (row["page"], row["y0"], expected, match.group(2).strip(), index)
+            )
             expected += 1
     return markers
 
@@ -203,13 +209,20 @@ def segment_lines(rows, page_count, top_margin, tolerance, skew_aware=False):
     if not markers:
         return [], column
 
-    stops = [(row["page"], row["y0"]) for row in body
-             if STOP_LINE.match(row["text"].strip())]
+    stops = [
+        (row["page"], row["y0"]) for row in body if STOP_LINE.match(row["text"].strip())
+    ]
     cuts = _cut_points(markers, body)
 
-    questions = [{"number": number, "start_page": page, "pages": {page},
-                  "lines": [rest] if rest else []}
-                 for page, _y0, number, rest, _index in markers]
+    questions = [
+        {
+            "number": number,
+            "start_page": page,
+            "pages": {page},
+            "lines": [rest] if rest else [],
+        }
+        for page, _y0, number, rest, _index in markers
+    ]
 
     for index, row in enumerate(body):
         here = (row["page"], row["y0"])
@@ -218,14 +231,14 @@ def segment_lines(rows, page_count, top_margin, tolerance, skew_aware=False):
             if here >= cut:
                 owner = position
         if owner is None:
-            continue                       # above the first marker: front matter
+            continue  # above the first marker: front matter
         if index == markers[owner][4]:
-            continue                       # the marker line itself, already added
+            continue  # the marker line itself, already added
         if STOP_LINE.match(row["text"].strip()):
-            continue                       # a stop line belongs to no question
+            continue  # a stop line belongs to no question
         marker_at = (markers[owner][0], markers[owner][1])
         if any(here >= stop > marker_at for stop in stops):
-            continue                       # past a stop line, so past the question
+            continue  # past a stop line, so past the question
         questions[owner]["lines"].append(row["text"].strip())
         questions[owner]["pages"].add(row["page"])
 

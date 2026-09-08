@@ -33,19 +33,23 @@ def page_lines(page):
     """Every text line on one PyMuPDF page, sorted the way a reader sees them."""
     lines = []
     for block in page.get_text("dict")["blocks"]:
-        if block["type"] != 0:                     # 0 is text; 1 is an image
+        if block["type"] != 0:  # 0 is text; 1 is an image
             continue
         for line in block["lines"]:
             text = "".join(span["text"] for span in line["spans"])
             if not text.strip():
                 continue
             x0, y0, x1, y1 = line["bbox"]
-            lines.append({
-                "x0": round(x0, 1), "y0": round(y0, 1),
-                "x1": round(x1, 1), "y1": round(y1, 1),
-                "size": round(line["spans"][0]["size"], 1),
-                "text": text,
-            })
+            lines.append(
+                {
+                    "x0": round(x0, 1),
+                    "y0": round(y0, 1),
+                    "x1": round(x1, 1),
+                    "y1": round(y1, 1),
+                    "size": round(line["spans"][0]["size"], 1),
+                    "text": text,
+                }
+            )
     # y first, then x: a marker and the text beside it must arrive in that order
     lines.sort(key=lambda line: (round(line["y0"], 0), line["x0"]))
     return lines
@@ -69,8 +73,11 @@ def page_character_counts(document, page_indices):
 
 def scanned_pages(character_counts):
     """The pages with no usable text layer."""
-    return sorted(index for index, count in character_counts.items()
-                  if count < SCAN_CHARACTER_FLOOR)
+    return sorted(
+        index
+        for index, count in character_counts.items()
+        if count < SCAN_CHARACTER_FLOOR
+    )
 
 
 def open_document(path):

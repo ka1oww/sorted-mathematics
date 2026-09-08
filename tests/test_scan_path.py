@@ -16,16 +16,19 @@ import pathlib
 import unittest
 
 import public_papers
+
 from reader import read_paper_with_report
 from tools.make_scan_proxy import make_proxy
 from tools.score_reader import score
 
-TRUTH_PATH = (pathlib.Path(__file__).resolve().parent / "fixtures"
-              / "scan_proxies_truth.json")
+TRUTH_PATH = (
+    pathlib.Path(__file__).resolve().parent / "fixtures" / "scan_proxies_truth.json"
+)
 
 
 def ocr_available():
     import page_ocr
+
     try:
         page_ocr._import_doctr()
     except page_ocr.OcrUnavailable:
@@ -48,9 +51,15 @@ def ensure_proxy(spec):
         return destination
     build = spec["build"]
     destination.parent.mkdir(parents=True, exist_ok=True)
-    make_proxy(public_papers.papers_dir() / build["source"], destination,
-               pages=build["pages"], dpi=build["dpi"], skew=build["skew"],
-               noise=build["noise"], quality=build["quality"])
+    make_proxy(
+        public_papers.papers_dir() / build["source"],
+        destination,
+        pages=build["pages"],
+        dpi=build["dpi"],
+        skew=build["skew"],
+        noise=build["noise"],
+        quality=build["quality"],
+    )
     return destination
 
 
@@ -60,9 +69,10 @@ class TheProxyRecipes(unittest.TestCase):
     def test_every_proxy_records_how_to_rebuild_it(self):
         for case, spec in truth().items():
             with self.subTest(case=case):
-                self.assertEqual(set(spec["build"]),
-                                 {"source", "pages", "dpi", "skew", "noise",
-                                  "quality"})
+                self.assertEqual(
+                    set(spec["build"]),
+                    {"source", "pages", "dpi", "skew", "noise", "quality"},
+                )
 
     def test_the_labels_are_the_source_labels_renumbered_from_zero(self):
         # A proxy holds only the pages its recipe names, so proxy page i is
@@ -75,9 +85,10 @@ class TheProxyRecipes(unittest.TestCase):
                 continue
             with self.subTest(case=case):
                 mapping = spec["build"]["pages"]
-                expected = [{"n": q["n"],
-                             "pages": [mapping.index(p) for p in q["pages"]]}
-                            for q in source_truth[base]["questions"]]
+                expected = [
+                    {"n": q["n"], "pages": [mapping.index(p) for p in q["pages"]]}
+                    for q in source_truth[base]["questions"]
+                ]
                 self.assertEqual(spec["questions"], expected)
 
     def test_the_labels_carry_no_question_text(self):
@@ -87,10 +98,8 @@ class TheProxyRecipes(unittest.TestCase):
 
 
 @unittest.skipUnless(public_papers.any_available(), public_papers.MISSING_PAPERS)
-@unittest.skipUnless(ocr_available(),
-                     "the OCR stack is not installed; see CLAUDE.md")
+@unittest.skipUnless(ocr_available(), "the OCR stack is not installed; see CLAUDE.md")
 class TheScanPath(unittest.TestCase):
-
     def read(self, spec):
         return read_paper_with_report(ensure_proxy(spec), strict=False)
 
@@ -112,16 +121,16 @@ class TheScanPath(unittest.TestCase):
         if not source_available(spec):
             self.skipTest(public_papers.MISSING_PAPERS)
         _predicted, report = self.read(spec)
-        self.assertEqual(report["pages_without_text_layer"],
-                         report["pages_read"])
+        self.assertEqual(report["pages_without_text_layer"], report["pages_read"])
 
     def test_rung_one_on_the_same_paper_finds_nothing(self):
         # 0 characters, 0 questions. This is the whole reason rung 2 exists.
         spec = truth()["seab-p1-raster"]
         if not source_available(spec):
             self.skipTest(public_papers.MISSING_PAPERS)
-        predicted, report = read_paper_with_report(ensure_proxy(spec), rung=1,
-                                                   strict=False)
+        predicted, report = read_paper_with_report(
+            ensure_proxy(spec), rung=1, strict=False
+        )
         self.assertEqual(predicted, [])
         self.assertFalse(report["trustworthy"])
 

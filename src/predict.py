@@ -42,8 +42,10 @@ DEFAULT_HOW_MANY = 3
 def classify(question_text, how_many=DEFAULT_HOW_MANY):
     """Return the most likely chapters and how confident the model is in each."""
     if not MODEL_PATH.exists():
-        print("no model at models/chapter_classifier.joblib. Train one with "
-              "python3 src/train.py, which needs the private corpus.")
+        print(
+            "no model at models/chapter_classifier.joblib. Train one with "
+            "python3 src/train.py, which needs the private corpus."
+        )
         raise SystemExit(1)
     question_vectoriser, chapter_classifier = joblib.load(MODEL_PATH)
 
@@ -52,7 +54,9 @@ def classify(question_text, how_many=DEFAULT_HOW_MANY):
 
     confidences = chapter_classifier.predict_proba(features)[0]
     ranked = confidences.argsort()[::-1][:how_many]
-    return [(chapter_classifier.classes_[index], confidences[index]) for index in ranked]
+    return [
+        (chapter_classifier.classes_[index], confidences[index]) for index in ranked
+    ]
 
 
 def classify_with_abstention(question_text, how_many=DEFAULT_HOW_MANY,
@@ -86,7 +90,7 @@ def classify_paper(path, pages=None, how_many=2):
 
 
 def parse_pages(text):
-    """"1-5" or "1,3,5" or both, zero-based, as PyMuPDF counts pages."""
+    """ "1-5" or "1,3,5" or both, zero-based, as PyMuPDF counts pages."""
     if not text:
         return None
     pages = []
@@ -103,10 +107,13 @@ def parse_pages(text):
 def report_paper(path, pages):
     for question, ranked in classify_paper(path, pages):
         opening = " ".join(question.text.split())[:58]
-        guesses = "   ".join(f"{CHAPTERS[chapter]} {confidence:.0%}"
-                             for chapter, confidence in ranked)
-        print(f"Q{question.number:>2}  pages={str(question.pages):<10} "
-              f"{opening:<60}  ->  {guesses}")
+        guesses = "   ".join(
+            f"{CHAPTERS[chapter]} {confidence:.0%}" for chapter, confidence in ranked
+        )
+        print(
+            f"Q{question.number:>2}  pages={question.pages!s:<10} "
+            f"{opening:<60}  ->  {guesses}"
+        )
 
 
 def main():
@@ -135,8 +142,7 @@ def main():
 
     question_text = " ".join(arguments) or sys.stdin.read()
     if not question_text.strip():
-        print("give me a question as an argument or on stdin, or a paper with "
-              "--pdf")
+        print("give me a question as an argument or on stdin, or a paper with --pdf")
         raise SystemExit(1)
     try:
         answered, ranked = classify_with_abstention(

@@ -6,7 +6,7 @@
 #     uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt
 #
 # These are the versions the rung-2 numbers were measured at. The install traps
-# are written up in CLAUDE.md; read them rather than rediscovering them.
+# are written up in AGENTS.md; read them rather than rediscovering them.
 pymupdf==1.28.2
 python-doctr==1.1.0
 torch==2.14.0

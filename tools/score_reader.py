@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
-from reader import read_paper_with_report                       # noqa: E402
+from reader import read_paper_with_report
 
 
 def score(predicted, expected):
@@ -37,8 +37,9 @@ def score(predicted, expected):
             found += 1
             if list(got["pages"]) == list(want["pages"]):
                 exact += 1
-    spurious = len([q for q in predicted
-                    if (q["number"], q["start_page"]) not in labelled_starts])
+    spurious = len(
+        [q for q in predicted if (q["number"], q["start_page"]) not in labelled_starts]
+    )
     return found, spurious, exact
 
 
@@ -48,8 +49,10 @@ def resolve(spec, papers_dir):
     subdirectories - the scan proxies live in one - but it may not escape."""
     named = pathlib.PurePosixPath(spec["pdf"])
     if named.is_absolute() or ".." in named.parts:
-        raise ValueError(f"a truth file may not name {spec['pdf']}: paths are "
-                         "relative to the papers directory")
+        raise ValueError(
+            f"a truth file may not name {spec['pdf']}: paths are "
+            "relative to the papers directory"
+        )
     return pathlib.Path(papers_dir).joinpath(*named.parts)
 
 
@@ -64,22 +67,36 @@ def score_truth(truth, papers_dir, rung=None):
             continue
         # strict off: scoring a reader that refuses to emit tells us nothing
         predicted, report = read_paper_with_report(
-            path, spec.get("pages"), rung=rung, strict=False)
+            path, spec.get("pages"), rung=rung, strict=False
+        )
         found, spurious, exact = score(predicted, spec["questions"])
-        yield {"case": case, "total": len(spec["questions"]), "found": found,
-               "spurious": spurious, "exact": exact, "rung": report["rung"],
-               "column": report["question_column"],
-               "trustworthy": report["trustworthy"],
-               "problems": report["problems"]}
+        yield {
+            "case": case,
+            "total": len(spec["questions"]),
+            "found": found,
+            "spurious": spurious,
+            "exact": exact,
+            "rung": report["rung"],
+            "column": report["question_column"],
+            "trustworthy": report["trustworthy"],
+            "problems": report["problems"],
+        }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("truth")
-    parser.add_argument("--papers", default="tests/fixtures/papers",
-                        help="directory holding the PDFs the truth file names")
-    parser.add_argument("--rung", type=int, choices=(1, 2),
-                        help="force a rung instead of choosing automatically")
+    parser.add_argument(
+        "--papers",
+        default="tests/fixtures/papers",
+        help="directory holding the PDFs the truth file names",
+    )
+    parser.add_argument(
+        "--rung",
+        type=int,
+        choices=(1, 2),
+        help="force a rung instead of choosing automatically",
+    )
     parser.add_argument("--json", action="store_true")
     arguments = parser.parse_args()
 
@@ -90,22 +107,28 @@ def main():
         print(json.dumps(results, indent=1))
         return
 
-    print(f"{'case':<20} {'rung':>4} {'questions':>9} {'found':>8} "
-          f"{'spurious':>8} {'exact pages':>12}")
+    print(
+        f"{'case':<20} {'rung':>4} {'questions':>9} {'found':>8} "
+        f"{'spurious':>8} {'exact pages':>12}"
+    )
     totals = {"total": 0, "found": 0, "spurious": 0, "exact": 0}
     for result in results:
         if "missing" in result:
             print(f"{result['case']:<20} paper not found: {result['missing']}")
             continue
-        print(f"{result['case']:<20} {result['rung']:>4} {result['total']:>9} "
-              f"{result['found']:>5}/{result['total']:<2} {result['spurious']:>8} "
-              f"{result['exact']:>7}/{result['total']:<4}")
+        print(
+            f"{result['case']:<20} {result['rung']:>4} {result['total']:>9} "
+            f"{result['found']:>5}/{result['total']:<2} {result['spurious']:>8} "
+            f"{result['exact']:>7}/{result['total']:<4}"
+        )
         for key in totals:
             totals[key] += result[key]
     if totals["total"]:
-        print(f"{'TOTAL':<20} {'':>4} {totals['total']:>9} "
-              f"{totals['found']:>5}/{totals['total']:<2} {totals['spurious']:>8} "
-              f"{totals['exact']:>7}/{totals['total']:<4}")
+        print(
+            f"{'TOTAL':<20} {'':>4} {totals['total']:>9} "
+            f"{totals['found']:>5}/{totals['total']:<2} {totals['spurious']:>8} "
+            f"{totals['exact']:>7}/{totals['total']:<4}"
+        )
 
 
 if __name__ == "__main__":

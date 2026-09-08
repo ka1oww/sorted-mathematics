@@ -69,11 +69,25 @@ the same rule, which scores 32 of 32 on rasterised proxies, including one rotate
 confidence signals do not trust, because a quietly mis-cut paper poisons
 everything downstream.
 
+`requirements.txt` is sufficient for papers with a usable text layer. If more
+than half the pages lack one, the reader automatically takes its optional OCR
+path instead. Install that stack separately with Python 3.12:
+
+```
+uv venv --python 3.12 .venv-ocr
+uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt
+```
+
+The OCR imports are lazy, so the usual text-layer workflow does not need this
+extra environment.
+
 The trained classifier is committed, so that runs from a clone. The corpus
 behind it does not ship. It is past-year exam material, so the questions
 themselves stay off this repository, which means the extractors, `src/merge.py`,
 `src/split.py` and `src/train.py` have nothing to read from a clone. The tests
-need none of it, because they run on synthetic fixtures:
+need none of it: ordinary fixtures are built synthetically. The optional
+public-paper regression needs separately supplied, non-committed PDFs; see
+[`tests/public_papers.py`](tests/public_papers.py).
 
 ```
 python3 -m pytest
@@ -265,7 +279,7 @@ src/learning_curve.py      group-aware training-pool subsampling
 src/reader.py              read_paper(): a PDF in, questions with page spans out
 src/question_rule.py       the one rule both rungs run
 src/page_lines.py          lines from the PDF text layer
-src/page_ocr.py            lines from OCR, for papers with no text layer
+src/page_ocr.py            lines from OCR, for papers mostly without text layers
 src/predict.py             the command-line demo, paper-to-chapters path and optional refusal cutoff
 src/abstention.py          the refusal option: cutoffs over the pipeline's own confidence
 src/chapters.py            the 21 chapters

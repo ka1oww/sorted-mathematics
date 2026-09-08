@@ -15,6 +15,7 @@ import pathlib
 import unittest
 
 import public_papers
+
 from reader import read_paper_with_report
 from tools.score_reader import resolve, score
 
@@ -33,9 +34,12 @@ class TheTruthSet(unittest.TestCase):
         self.assertEqual(total, EXPECTED_TOTAL)
 
     def test_it_holds_the_page_spanning_questions(self):
-        spanning = [question for spec in self.truth.values()
-                    for question in spec["questions"]
-                    if len(question["pages"]) > 1]
+        spanning = [
+            question
+            for spec in self.truth.values()
+            for question in spec["questions"]
+            if len(question["pages"]) > 1
+        ]
         self.assertEqual(len(spanning), EXPECTED_PAGE_SPANNING)
 
     def test_every_page_a_question_claims_was_actually_read(self):
@@ -60,8 +64,10 @@ class TheScorer(unittest.TestCase):
 
     @staticmethod
     def predicted(*specs):
-        return [{"number": number, "start_page": pages[0], "pages": list(pages)}
-                for number, pages in specs]
+        return [
+            {"number": number, "start_page": pages[0], "pages": list(pages)}
+            for number, pages in specs
+        ]
 
     @staticmethod
     def expected(*specs):
@@ -69,20 +75,24 @@ class TheScorer(unittest.TestCase):
 
     def test_a_perfect_read_scores_full_marks_with_nothing_spurious(self):
         self.assertEqual(
-            score(self.predicted((1, [0]), (2, [1, 2])),
-                  self.expected((1, [0]), (2, [1, 2]))),
-            (2, 0, 2))
+            score(
+                self.predicted((1, [0]), (2, [1, 2])),
+                self.expected((1, [0]), (2, [1, 2])),
+            ),
+            (2, 0, 2),
+        )
 
     def test_a_question_found_on_the_wrong_start_page_is_not_found(self):
         self.assertEqual(
-            score(self.predicted((1, [5])), self.expected((1, [0]))),
-            (0, 1, 0))
+            score(self.predicted((1, [5])), self.expected((1, [0]))), (0, 1, 0)
+        )
 
     def test_a_missed_page_span_still_counts_as_found(self):
         # The failure a single accuracy number hides: every question found,
         # every page break cut wrongly.
-        found, spurious, exact = score(self.predicted((1, [0])),
-                                       self.expected((1, [0, 1])))
+        found, spurious, exact = score(
+            self.predicted((1, [0])), self.expected((1, [0, 1]))
+        )
         self.assertEqual((found, exact), (1, 0))
         self.assertEqual(spurious, 0)
 
@@ -92,29 +102,31 @@ class TheScorer(unittest.TestCase):
         # rather than a deduction from the other two.
         self.assertEqual(
             score(self.predicted((1, [0]), (2, [1])), self.expected((1, [0]))),
-            (1, 1, 1))
+            (1, 1, 1),
+        )
 
     def test_a_truth_file_may_not_name_a_path_outside_the_papers_directory(self):
         for escape in ["/etc/passwd", "../../secret.pdf"]:
-            with self.subTest(path=escape):
-                with self.assertRaises(ValueError):
-                    resolve({"pdf": escape}, "tests/fixtures/papers")
+            with self.subTest(path=escape), self.assertRaises(ValueError):
+                resolve({"pdf": escape}, "tests/fixtures/papers")
 
     def test_a_truth_file_may_name_a_subdirectory(self):
         # The scan proxies live in one.
-        self.assertEqual(resolve({"pdf": "proxies/a.pdf"}, "papers"),
-                         pathlib.Path("papers/proxies/a.pdf"))
+        self.assertEqual(
+            resolve({"pdf": "proxies/a.pdf"}, "papers"),
+            pathlib.Path("papers/proxies/a.pdf"),
+        )
 
 
 @unittest.skipUnless(public_papers.any_available(), public_papers.MISSING_PAPERS)
 class TheMeasuredBaseline(unittest.TestCase):
-
     def setUp(self):
         self.truth = public_papers.truth()
 
     def read(self, spec):
-        return read_paper_with_report(public_papers.paper_path(spec),
-                                      spec["pages"], strict=False)
+        return read_paper_with_report(
+            public_papers.paper_path(spec), spec["pages"], strict=False
+        )
 
     def test_every_paper_scores_exactly_what_it_was_measured_at(self):
         for case, spec in self.truth.items():
@@ -135,16 +147,14 @@ class TheMeasuredBaseline(unittest.TestCase):
         for case, spec in self.truth.items():
             if not public_papers.available(spec):
                 continue
-            expected += sum(len(want["pages"]) > 1
-                            for want in spec["questions"])
+            expected += sum(len(want["pages"]) > 1 for want in spec["questions"])
             predicted, _report = self.read(spec)
             by_number = {q["number"]: q for q in predicted}
             for want in spec["questions"]:
                 if len(want["pages"]) == 1:
                     continue
                 with self.subTest(case=case, question=want["n"]):
-                    self.assertEqual(by_number[want["n"]]["pages"],
-                                     want["pages"])
+                    self.assertEqual(by_number[want["n"]]["pages"], want["pages"])
                     checked += 1
         self.assertEqual(checked, expected)
 
@@ -185,8 +195,9 @@ class TheHeldOutPaper(unittest.TestCase):
 
     def setUp(self):
         self.truth = public_papers.truth()
-        self.held_out = {case: spec for case, spec in self.truth.items()
-                         if spec.get("held_out")}
+        self.held_out = {
+            case: spec for case, spec in self.truth.items() if spec.get("held_out")
+        }
 
     def test_exactly_one_paper_is_held_out(self):
         self.assertEqual(len(self.held_out), 1)
@@ -197,11 +208,13 @@ class TheHeldOutPaper(unittest.TestCase):
                 self.skipTest(public_papers.MISSING_PAPERS)
             with self.subTest(case=case):
                 predicted, _report = read_paper_with_report(
-                    public_papers.paper_path(spec), spec["pages"], strict=False)
+                    public_papers.paper_path(spec), spec["pages"], strict=False
+                )
                 found, spurious, exact = score(predicted, spec["questions"])
-                self.assertEqual((found, spurious, exact),
-                                 (len(spec["questions"]), 0,
-                                  len(spec["questions"])))
+                self.assertEqual(
+                    (found, spurious, exact),
+                    (len(spec["questions"]), 0, len(spec["questions"])),
+                )
 
 
 if __name__ == "__main__":

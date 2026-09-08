@@ -28,8 +28,7 @@ MISSING_PAPERS = (
 
 
 def papers_dir():
-    return pathlib.Path(os.environ.get("SORTED_PUBLIC_PAPERS")
-                        or DEFAULT_PAPERS_DIR)
+    return pathlib.Path(os.environ.get("SORTED_PUBLIC_PAPERS") or DEFAULT_PAPERS_DIR)
 
 
 def truth():
@@ -38,6 +37,7 @@ def truth():
 
 def paper_path(spec):
     from tools.score_reader import resolve
+
     return resolve(spec, papers_dir())
 
 

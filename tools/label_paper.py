@@ -26,14 +26,16 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
-import page_lines                                               # noqa: E402
+import page_lines
 
-BOUNDARY_RULE = ("a question owns every page from the page its number appears "
-                 "on up to the page before the next number appears")
+BOUNDARY_RULE = (
+    "a question owns every page from the page its number appears "
+    "on up to the page before the next number appears"
+)
 
 
 def parse_pages(text, page_count):
-    """"1-12" or "1,3,5" or both, zero-based, as PyMuPDF counts pages."""
+    """ "1-12" or "1,3,5" or both, zero-based, as PyMuPDF counts pages."""
     if not text:
         return list(range(page_count))
     pages = []
@@ -66,7 +68,7 @@ def skeleton(path, case=None, pages=None):
             "pages_without_text_layer": scanned,
             "questions": [],
             "_how_to_fill_in": [
-                "One entry per question: {\"n\": 1, \"pages\": [1]}.",
+                'One entry per question: {"n": 1, "pages": [1]}.',
                 f"Page indices are zero-based. {BOUNDARY_RULE.capitalize()}.",
                 "A question spanning a break lists every page: [11, 12].",
                 "Delete this key when the labelling is done.",
@@ -81,8 +83,9 @@ def main():
     parser.add_argument("--case", help="name for this paper in the truth file")
     parser.add_argument("--pages", help='e.g. "1-12" or "1,3,5"')
     arguments = parser.parse_args()
-    print(json.dumps(skeleton(arguments.pdf, arguments.case, arguments.pages),
-                     indent=1))
+    print(
+        json.dumps(skeleton(arguments.pdf, arguments.case, arguments.pages), indent=1)
+    )
 
 
 if __name__ == "__main__":
