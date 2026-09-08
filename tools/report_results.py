@@ -40,8 +40,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
-from report_abstention import (ABSTENTION_FIGURE, abstention_section,  # noqa: E402
-                               build_abstention, draw_abstention_curve)
+from report_abstention import (  # noqa: E402
+    ABSTENTION_FIGURE,
+    RefitPredictionMismatch,
+    abstention_not_measurable_section,
+    abstention_section,
+    build_abstention,
+    draw_abstention_curve,
+)
 
 from chapters import CHAPTERS, CHAPTER_SLUGS  # noqa: E402
 from features import read_split, to_features  # noqa: E402
@@ -623,12 +629,15 @@ def main():
                                           one_seeds_agree)
     sections += [""] + resplit_section(one, resplits)
 
-    # The abstention figure is drawn here, beside the confusion matrices, so
-    # one run of this script leaves RESULTS.md with every figure it names.
-    abstained = build_abstention()
-    draw_abstention_curve(abstained["val_points"], abstained["cutoff"],
-                          abstained["test_selective"], ABSTENTION_FIGURE)
-    sections += [""] + abstention_section(abstained)
+    abstained = None
+    try:
+        abstained = build_abstention()
+    except RefitPredictionMismatch as error:
+        sections += [""] + abstention_not_measurable_section(error)
+    else:
+        draw_abstention_curve(abstained["val_points"], abstained["cutoff"],
+                              abstained["test_selective"], ABSTENTION_FIGURE)
+        sections += [""] + abstention_section(abstained)
 
     sections += ["", "## Confusion matrices", ""]
     if committed_matches_ledger:
@@ -695,7 +704,8 @@ def main():
 
     RESULTS_PATH.write_text("\n".join(sections) + "\n", encoding="utf-8")
     print(f"wrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
-    print(f"wrote {ABSTENTION_FIGURE.relative_to(PROJECT_ROOT)}")
+    if abstained is not None:
+        print(f"wrote {ABSTENTION_FIGURE.relative_to(PROJECT_ROOT)}")
     print(f"wrote {(DOCS_DIR / 'confusion-approach-1.png').relative_to(PROJECT_ROOT)}")
     if approach_two:
         print(f"wrote {(DOCS_DIR / 'confusion-approach-2.png').relative_to(PROJECT_ROOT)}")

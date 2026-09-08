@@ -60,6 +60,10 @@ DOCS_DIR = PROJECT_ROOT / "docs"
 ABSTENTION_FIGURE = DOCS_DIR / "abstention-curve.png"
 
 
+class RefitPredictionMismatch(SystemExit):
+    pass
+
+
 def validation_confidences():
     """Approach 1 fitted on training rows alone, read back on validation.
 
@@ -118,7 +122,7 @@ def refit_and_score_once(cutoff):
     probabilities = classifier.predict_proba(to_features(vectoriser, test_questions))
     predicted = list(classifier.classes_[probabilities.argmax(axis=1)])
     if not all(run.predicted == predicted for run in one_runs):
-        raise SystemExit(
+        raise RefitPredictionMismatch(
             "the refit model does not reproduce the ledger runs' predictions. "
             "Refusing to report abstention numbers for another model's "
             "predictions"
@@ -282,7 +286,7 @@ def abstention_section(built):
         "",
         sweep_table(built["val_points"]),
         "",
-        f"{calibration_sentence(built['mean_gap'], built['signed_gap'])}:",
+        calibration_sentence(built["mean_gap"], built["signed_gap"]),
         "",
         reliability_table(built["bins"]),
         "",
@@ -312,6 +316,16 @@ def abstention_section(built):
         ),
     ]
     return lines
+
+
+def abstention_not_measurable_section(reason):
+    return [
+        "## When the classifier declines to answer",
+        "",
+        "**Abstention is not measurable.**",
+        "",
+        str(reason),
+    ]
 
 
 def main():

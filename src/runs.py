@@ -266,15 +266,19 @@ def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     covers in run_transformer, so the two times are the same kind of number.
     """
     from features import fit_question_vectoriser, to_features
-    from train import train_chapter_classifier
+    from train import choose_regularisation, train_chapter_classifier
 
     started = time.perf_counter()
     silence = (
         contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
     )
     with silence:
-        _, _, regularisation = fit_train_only_tfidf(
-            train_questions, y_train, val_questions, y_val, quiet=quiet
+        question_vectoriser = fit_question_vectoriser(train_questions)
+        regularisation, _ = choose_regularisation(
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            to_features(question_vectoriser, val_questions),
+            y_val,
         )
         final_questions = train_questions + val_questions
         question_vectoriser = fit_question_vectoriser(final_questions)

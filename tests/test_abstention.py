@@ -17,6 +17,8 @@ import unittest
 
 import abstention
 
+from tools.report_abstention import abstention_not_measurable_section
+
 try:
     import predict
 except ModuleNotFoundError:
@@ -194,6 +196,12 @@ class MessageTests(unittest.TestCase):
             abstention.sweep_points(Y_TRUE, PREDICTED, CONFIDENCES, [0.0, 2.0]))
         self.assertIn("Accuracy on answered", table)
         self.assertIn("no questions answered", table)
+
+    def test_a_refit_mismatch_is_carried_verbatim_when_not_measurable(self):
+        reason = "the refit model does not reproduce the ledger runs' predictions"
+        section = abstention_not_measurable_section(reason)
+        self.assertIn("**Abstention is not measurable.**", section)
+        self.assertIn(reason, section)
 
 
 @unittest.skipUnless(predict, "predict dependencies unavailable")
