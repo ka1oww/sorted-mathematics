@@ -1,0 +1,352 @@
+{
+ "seab-p1": {
+  "pdf": "seab-9758-specimen-2025.pdf",
+  "label": "SEAB/UCLES H2 Maths 9758 Specimen 2025, Paper 1",
+  "held_out": false,
+  "pages": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "note": "pdf page 5 is the copyright + BLANK PAGE end matter, included on purpose",
+  "questions": [
+   {
+    "n": 1,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 2,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 3,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 4,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 5,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 6,
+    "pages": [
+     2
+    ]
+   },
+   {
+    "n": 7,
+    "pages": [
+     2
+    ]
+   },
+   {
+    "n": 8,
+    "pages": [
+     3
+    ]
+   },
+   {
+    "n": 9,
+    "pages": [
+     3
+    ]
+   },
+   {
+    "n": 10,
+    "pages": [
+     4
+    ]
+   },
+   {
+    "n": 11,
+    "pages": [
+     4
+    ]
+   }
+  ]
+ },
+ "seab-p2": {
+  "pdf": "seab-9758-specimen-2025.pdf",
+  "label": "SEAB/UCLES H2 Maths 9758 Specimen 2025, Paper 2",
+  "held_out": false,
+  "pages": [
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22
+  ],
+  "note": "pdf page 22 is the copyright end matter, included on purpose",
+  "questions": [
+   {
+    "n": 1,
+    "pages": [
+     16
+    ]
+   },
+   {
+    "n": 2,
+    "pages": [
+     16
+    ]
+   },
+   {
+    "n": 3,
+    "pages": [
+     17
+    ]
+   },
+   {
+    "n": 4,
+    "pages": [
+     17
+    ]
+   },
+   {
+    "n": 5,
+    "pages": [
+     18
+    ]
+   },
+   {
+    "n": 6,
+    "pages": [
+     18
+    ]
+   },
+   {
+    "n": 7,
+    "pages": [
+     19
+    ]
+   },
+   {
+    "n": 8,
+    "pages": [
+     19
+    ]
+   },
+   {
+    "n": 9,
+    "pages": [
+     20
+    ]
+   },
+   {
+    "n": 10,
+    "pages": [
+     21
+    ]
+   }
+  ]
+ },
+ "cie-9709-12": {
+  "pdf": "9709-Mathematics-March-2026-Question-Paper-12.pdf",
+  "label": "Cambridge International 9709/12 March 2026, write-on paper",
+  "held_out": false,
+  "pages": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "note": "pdf page 1 is BLANK PAGE, page 15 is the additional answer page plus copyright; both included on purpose. Q10 and Q11 each span a page break.",
+  "questions": [
+   {
+    "n": 1,
+    "pages": [
+     2
+    ]
+   },
+   {
+    "n": 2,
+    "pages": [
+     3
+    ]
+   },
+   {
+    "n": 3,
+    "pages": [
+     4
+    ]
+   },
+   {
+    "n": 4,
+    "pages": [
+     5
+    ]
+   },
+   {
+    "n": 5,
+    "pages": [
+     6
+    ]
+   },
+   {
+    "n": 6,
+    "pages": [
+     7
+    ]
+   },
+   {
+    "n": 7,
+    "pages": [
+     8
+    ]
+   },
+   {
+    "n": 8,
+    "pages": [
+     9
+    ]
+   },
+   {
+    "n": 9,
+    "pages": [
+     10
+    ]
+   },
+   {
+    "n": 10,
+    "pages": [
+     11,
+     12
+    ]
+   },
+   {
+    "n": 11,
+    "pages": [
+     13,
+     14
+    ]
+   }
+  ]
+ },
+ "cie-9709-32": {
+  "pdf": "9709-Mathematics-March-2026-Question-Paper-32.pdf",
+  "label": "Cambridge International 9709/32 March 2026, write-on paper",
+  "held_out": true,
+  "pages": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "note": "held out: labelled only after the rule was committed at 8355d7a. p10 and p18 are answer-space/blank pages with no body content, so they belong to no question. Q7, Q9, Q10, Q11 each span a page break.",
+  "questions": [
+   {
+    "n": 1,
+    "pages": [
+     1
+    ]
+   },
+   {
+    "n": 2,
+    "pages": [
+     2
+    ]
+   },
+   {
+    "n": 3,
+    "pages": [
+     3
+    ]
+   },
+   {
+    "n": 4,
+    "pages": [
+     4
+    ]
+   },
+   {
+    "n": 5,
+    "pages": [
+     5
+    ]
+   },
+   {
+    "n": 6,
+    "pages": [
+     6
+    ]
+   },
+   {
+    "n": 7,
+    "pages": [
+     7,
+     8
+    ]
+   },
+   {
+    "n": 8,
+    "pages": [
+     9
+    ]
+   },
+   {
+    "n": 9,
+    "pages": [
+     11,
+     12
+    ]
+   },
+   {
+    "n": 10,
+    "pages": [
+     13,
+     14
+    ]
+   },
+   {
+    "n": 11,
+    "pages": [
+     15,
+     16
+    ]
+   }
+  ]
+ }
+}

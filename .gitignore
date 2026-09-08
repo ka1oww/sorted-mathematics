@@ -12,10 +12,16 @@ checkpoints/
 *.bin
 *.safetensors
 
+# The public exam papers the page reader is regression-tested against. They are
+# third-party copyright and this repository is public, so the PDFs stay out of
+# it and only the labelling is committed. See tests/public_papers.py.
+tests/fixtures/papers/
+
 # Python
 __pycache__/
 *.pyc
 .venv/
+.venv-ocr/
 venv/
 .pytest_cache/
 
