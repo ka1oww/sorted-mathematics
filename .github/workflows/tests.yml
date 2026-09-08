@@ -13,10 +13,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # The tests need neither the private corpus nor modelling dependencies:
-      # ordinary reader fixtures build their own PDFs and public-paper tests
-      # skip without their non-committed PDFs. pymupdf is the page reader's only
-      # product dependency. The OCR path is not installed, so scan tests skip;
-      # see the OCR notes in AGENTS.md.
-      - run: pip install pytest pymupdf
+      # The protocol suite starts the local stdio server with a synthetic,
+      # temporary model and PDF. It needs neither the private corpus nor a
+      # committed artifact. OCR remains optional, so scan tests skip here.
+      - run: pip install pytest -r requirements-mcp.txt
       - run: python -m pytest -q

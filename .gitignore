@@ -7,6 +7,7 @@ data/private/
 # a clone; it stays ignored here so that retraining it does not put a new one into
 # a public repository on the next git add -A.
 models/*
+*.policy.json
 checkpoints/
 *.pt
 *.bin
@@ -16,6 +17,7 @@ checkpoints/
 # third-party copyright and this repository is public, so the PDFs stay out of
 # it and only the labelling is committed. See tests/public_papers.py.
 tests/fixtures/papers/
+*.pdf
 
 # Python
 __pycache__/

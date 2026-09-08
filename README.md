@@ -27,7 +27,67 @@ in 1.6 seconds against 15 minutes for the transformer, with 10,884 features
 against 67 million parameters, and it can show you the words behind every
 decision.
 
-## Running it
+## MCP server
+
+The local MCP server is the supported path from a clone to a client. It never
+ships a classifier, policy sidecar, corpus, or paper. Put the classifier and
+its matching policy sidecar outside this repository, on the same trusted
+machine. The sidecar binds the calibrated cutoff to the exact model hash and
+validation-split hash.
+
+```
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-mcp.txt
+# Optional, only for image-only PDFs:
+pip install -r requirements-ocr.txt
+```
+
+Then replace every absolute-path placeholder in this client configuration:
+
+```json
+{
+  "mcpServers": {
+    "sorted-mathematics": {
+      "command": "/ABSOLUTE/PATH/TO/sorted-mathematics/.venv/bin/python",
+      "args": ["/ABSOLUTE/PATH/TO/sorted-mathematics/src/mcp_server.py"],
+      "cwd": "/ABSOLUTE/PATH/TO/sorted-mathematics",
+      "env": {
+        "SORTED_MATH_MODEL_PATH": "/ABSOLUTE/LOCAL/PATH/chapter_classifier.joblib",
+        "SORTED_MATH_POLICY_PATH": "/ABSOLUTE/LOCAL/PATH/chapter_classifier.policy.json"
+      }
+    }
+  }
+}
+```
+
+Stdio clients use a restricted environment, so both variables belong in this
+client configuration rather than being assumed inherited. The server exposes
+`classify_question`, `read_paper`, and the `sorted-mathematics://chapters`
+resource. `read_paper` returns question numbers and zero-based page spans only;
+it never sends extracted question text across MCP.
+
+Create the sidecar only in the trusted training environment, outside the
+repository. Its abstention report is a trusted JSON aggregate containing the
+selected cutoff, for example `{ "cutoff": 0.50 }`:
+
+```
+python3 tools/export_runtime_policy.py \
+  --model /ABSOLUTE/LOCAL/PATH/chapter_classifier.joblib \
+  --validation-split /ABSOLUTE/LOCAL/PATH/validation.jsonl \
+  --abstention-report /ABSOLUTE/LOCAL/PATH/abstention.json \
+  --output /ABSOLUTE/LOCAL/PATH/chapter_classifier.policy.json
+```
+
+The client needs only that model and its matching sidecar. Without them,
+`classify_question` returns a sanitized `model_unavailable` error, while
+`read_paper` and the chapters resource remain available.
+
+## Command-line demo
+
+The demo needs a trained model at `models/chapter_classifier.joblib`. No model
+ships with the repository, so train one locally first (which needs the private
+corpus) or supply your own:
 
 ```
 pip install -r requirements.txt
@@ -81,13 +141,13 @@ uv pip install --python .venv-ocr/bin/python -r requirements-ocr.txt
 The OCR imports are lazy, so the usual text-layer workflow does not need this
 extra environment.
 
-The trained classifier is committed, so that runs from a clone. The corpus
-behind it does not ship. It is past-year exam material, so the questions
-themselves stay off this repository, which means the extractors, `src/merge.py`,
-`src/split.py` and `src/train.py` have nothing to read from a clone. The tests
-need none of it: ordinary fixtures are built synthetically. The optional
-public-paper regression needs separately supplied, non-committed PDFs; see
-[`tests/public_papers.py`](tests/public_papers.py).
+The trained classifier is local-only, as is its model-matched runtime-policy
+sidecar. The corpus behind it does not ship. It is past-year exam material, so
+the questions themselves stay off this repository, which means the extractors,
+`src/merge.py`, `src/split.py` and `src/train.py` have nothing to read from a
+clone. The tests need none of it: ordinary fixtures are built synthetically.
+The optional public-paper regression needs separately supplied, non-committed
+PDFs; see [`tests/public_papers.py`](tests/public_papers.py).
 
 ```
 python3 -m pytest
@@ -209,8 +269,10 @@ Both rows regenerate from the run ledger in `data/private/runs/`, which
 `tools/compare_runs.py seeds --record` fills and `tools/report_results.py`
 reads. Every record carries the hash of the test split it was scored on, so a
 model that outlives its split cannot put a training-set score into the table.
-The transformer itself is 268 MB and is not committed; Approach 1's model is,
-and its predictions match its ledger runs exactly.
+Neither model is committed: the transformer is 268 MB, and Approach 1's
+`models/chapter_classifier.joblib` stays local like every other private
+artifact. `python3 src/train.py` refits it, and its predictions match its
+ledger runs exactly.
 
 ## What each model gets wrong
 
@@ -277,6 +339,8 @@ src/runs.py                one from-scratch run of either approach, and the ledg
 src/intervals.py           confidence intervals and the paired test, pure Python
 src/learning_curve.py      group-aware training-pool subsampling
 src/reader.py              read_paper(): a PDF in, questions with page spans out
+src/mcp_service.py         local model, policy and pointer-only reader boundary
+src/mcp_server.py          FastMCP stdio transport for the two tools and chapter resource
 src/question_rule.py       the one rule both rungs run
 src/page_lines.py          lines from the PDF text layer
 src/page_ocr.py            lines from OCR, for papers mostly without text layers
@@ -297,6 +361,7 @@ tools/learning_curve.py    records fractional training-pool runs
 tools/report_results.py    writes RESULTS.md, the confusion matrices and the abstention curve
 tools/report_learning_curve.py  writes LEARNING-CURVE.md and its plot
 tools/report_abstention.py  sweeps the abstention cutoff and draws its curve
+tools/export_runtime_policy.py  writes a model-bound local MCP policy sidecar
 tools/score_reader.py      found, spurious and exact pages, never averaged
 tools/label_paper.py       a labelling skeleton for a new yardstick paper
 tools/make_scan_proxy.py   manufactures a scan from a digital paper
