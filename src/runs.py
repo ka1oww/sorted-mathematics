@@ -223,6 +223,40 @@ def questions_and_chapters(rows):
 # Approach 1
 
 
+def fit_train_only_tfidf(train_questions, y_train, val_questions, y_val,
+                       quiet=False):
+    """Approach 1 fitted on the training rows alone, tuned against validation.
+
+    The full procedure refits on training plus validation before anything is
+    scored, which leaves no held out row to set an abstention cutoff from. This
+    is the same fit stopped halfway: vocabulary and regularisation chosen from
+    the training rows, with validation used only to tune. The abstention report
+    reads its validation confidences from here and its test confidences from
+    the refit model, so the cutoff is chosen without ever looking at the test
+    rows.
+    """
+    from features import fit_question_vectoriser, to_features
+    from train import choose_regularisation, train_chapter_classifier
+
+    silence = (
+        contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
+    )
+    with silence:
+        question_vectoriser = fit_question_vectoriser(train_questions)
+        regularisation, _ = choose_regularisation(
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            to_features(question_vectoriser, val_questions),
+            y_val,
+        )
+        chapter_classifier = train_chapter_classifier(
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            regularisation,
+        )
+    return question_vectoriser, chapter_classifier, regularisation
+
+
 def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
     """Approach 1's whole training procedure, timed as one piece.
 

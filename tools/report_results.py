@@ -1,4 +1,4 @@
-"""Generate RESULTS.md and the confusion-matrix images from the frozen split.
+"""Generate RESULTS.md, the confusion-matrix images and the abstention figure.
 
 Every number in RESULTS.md comes from this script reading the frozen dataset,
 so nothing in it is typed by hand. DATA-PLAN.md section 7 asks for exactly
@@ -38,16 +38,39 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "tools"))
 
-from chapters import CHAPTERS, CHAPTER_SLUGS  # noqa: E402
+from report_abstention import (  # noqa: E402
+    ABSTENTION_FIGURE,
+    RefitPredictionMismatch,
+    abstention_section,
+    build_abstention,
+    draw_abstention_curve,
+)
+
+from abstention import abstention_not_measurable_section  # noqa: E402
+from chapters import CHAPTER_SLUGS, CHAPTERS  # noqa: E402
 from features import read_split, to_features  # noqa: E402
-from intervals import (intervals_overlap, mcnemar_exact_p,  # noqa: E402
-                       paired_difference_interval, paired_outcomes, spread,
-                       wilson_interval)
+from intervals import (  # noqa: E402
+    intervals_overlap,
+    mcnemar_exact_p,
+    paired_difference_interval,
+    paired_outcomes,
+    spread,
+    wilson_interval,
+)
 from paths import MODELS_DIR, PRIVATE_DATA, assert_inside_project  # noqa: E402
 from predict import classify  # noqa: E402
-from runs import (APPROACH_ONE, APPROACH_TWO, DEFAULT_SEEDS, METHOD,  # noqa: E402
-                  file_hash, load_runs, resplit_tfidf, split_hash)
+from runs import (  # noqa: E402
+    APPROACH_ONE,
+    APPROACH_TWO,
+    DEFAULT_SEEDS,
+    METHOD,
+    file_hash,
+    load_runs,
+    resplit_tfidf,
+    split_hash,
+)
 from split import read_rows  # noqa: E402
 
 DOCS_DIR = PROJECT_ROOT / "docs"
@@ -619,6 +642,16 @@ def main():
                                           one_seeds_agree)
     sections += [""] + resplit_section(one, resplits)
 
+    abstained = None
+    try:
+        abstained = build_abstention()
+    except RefitPredictionMismatch as error:
+        sections += [""] + abstention_not_measurable_section(error)
+    else:
+        draw_abstention_curve(abstained["val_points"], abstained["cutoff"],
+                              abstained["test_selective"], ABSTENTION_FIGURE)
+        sections += [""] + abstention_section(abstained)
+
     sections += ["", "## Confusion matrices", ""]
     if committed_matches_ledger:
         sections.append(
@@ -684,6 +717,8 @@ def main():
 
     RESULTS_PATH.write_text("\n".join(sections) + "\n", encoding="utf-8")
     print(f"wrote {RESULTS_PATH.relative_to(PROJECT_ROOT)}")
+    if abstained is not None:
+        print(f"wrote {ABSTENTION_FIGURE.relative_to(PROJECT_ROOT)}")
     print(f"wrote {(DOCS_DIR / 'confusion-approach-1.png').relative_to(PROJECT_ROOT)}")
     if approach_two:
         print(f"wrote {(DOCS_DIR / 'confusion-approach-2.png').relative_to(PROJECT_ROOT)}")
