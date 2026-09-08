@@ -49,15 +49,28 @@ from report_abstention import (  # noqa: E402
 )
 
 from abstention import abstention_not_measurable_section  # noqa: E402
-from chapters import CHAPTERS, CHAPTER_SLUGS  # noqa: E402
+from chapters import CHAPTER_SLUGS, CHAPTERS  # noqa: E402
 from features import read_split, to_features  # noqa: E402
-from intervals import (intervals_overlap, mcnemar_exact_p,  # noqa: E402
-                       paired_difference_interval, paired_outcomes, spread,
-                       wilson_interval)
+from intervals import (  # noqa: E402
+    intervals_overlap,
+    mcnemar_exact_p,
+    paired_difference_interval,
+    paired_outcomes,
+    spread,
+    wilson_interval,
+)
 from paths import MODELS_DIR, PRIVATE_DATA, assert_inside_project  # noqa: E402
 from predict import classify  # noqa: E402
-from runs import (APPROACH_ONE, APPROACH_TWO, DEFAULT_SEEDS, METHOD,  # noqa: E402
-                  file_hash, load_runs, resplit_tfidf, split_hash)
+from runs import (  # noqa: E402
+    APPROACH_ONE,
+    APPROACH_TWO,
+    DEFAULT_SEEDS,
+    METHOD,
+    file_hash,
+    load_runs,
+    resplit_tfidf,
+    split_hash,
+)
 from split import read_rows  # noqa: E402
 
 DOCS_DIR = PROJECT_ROOT / "docs"

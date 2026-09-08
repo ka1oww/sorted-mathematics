@@ -34,6 +34,14 @@ pip install -r requirements.txt
 python3 src/predict.py "your question here"
 ```
 
+By default the classifier always answers. Pass `--min-confidence` to let it
+decline when its leading chapter falls below a cutoff. It still prints the top
+candidates and their confidences when it declines:
+
+```
+python3 src/predict.py --min-confidence 0.50 "your question here"
+```
+
 The trained classifier is committed, so that runs from a clone. The corpus
 behind it does not ship. It is past-year exam material, so the questions
 themselves stay off this repository, which means the extractors, `src/merge.py`,
