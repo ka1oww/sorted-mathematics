@@ -223,18 +223,21 @@ def questions_and_chapters(rows):
 # Approach 1
 
 
-def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
-    """Approach 1's whole training procedure, timed as one piece.
+def fit_train_only_tfidf(train_questions, y_train, val_questions, y_val,
+                       quiet=False):
+    """Approach 1 fitted on the training rows alone, tuned against validation.
 
-    Mirrors src/train.py exactly: vocabulary and regularisation are chosen from
-    the training and validation rows, then the model is refit on both. The
-    clock covers all of it, which is the same span the transformer's clock
-    covers in run_transformer, so the two times are the same kind of number.
+    The full procedure refits on training plus validation before anything is
+    scored, which leaves no held out row to set an abstention cutoff from. This
+    is the same fit stopped halfway: vocabulary and regularisation chosen from
+    the training rows, with validation used only to tune. The abstention report
+    reads its validation confidences from here and its test confidences from
+    the refit model, so the cutoff is chosen without ever looking at the test
+    rows.
     """
     from features import fit_question_vectoriser, to_features
     from train import choose_regularisation, train_chapter_classifier
 
-    started = time.perf_counter()
     silence = (
         contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
     )
@@ -245,6 +248,33 @@ def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
             y_train,
             to_features(question_vectoriser, val_questions),
             y_val,
+        )
+        chapter_classifier = train_chapter_classifier(
+            to_features(question_vectoriser, train_questions),
+            y_train,
+            regularisation,
+        )
+    return question_vectoriser, chapter_classifier, regularisation
+
+
+def fit_tfidf(train_questions, y_train, val_questions, y_val, quiet=False):
+    """Approach 1's whole training procedure, timed as one piece.
+
+    Mirrors src/train.py exactly: vocabulary and regularisation are chosen from
+    the training and validation rows, then the model is refit on both. The
+    clock covers all of it, which is the same span the transformer's clock
+    covers in run_transformer, so the two times are the same kind of number.
+    """
+    from features import fit_question_vectoriser, to_features
+    from train import train_chapter_classifier
+
+    started = time.perf_counter()
+    silence = (
+        contextlib.redirect_stdout(io.StringIO()) if quiet else contextlib.nullcontext()
+    )
+    with silence:
+        _, _, regularisation = fit_train_only_tfidf(
+            train_questions, y_train, val_questions, y_val, quiet=quiet
         )
         final_questions = train_questions + val_questions
         question_vectoriser = fit_question_vectoriser(final_questions)

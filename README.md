@@ -227,7 +227,8 @@ src/evaluate_transformer.py  Approach 2 measurement, same report shape
 src/runs.py                one from-scratch run of either approach, and the ledger
 src/intervals.py           confidence intervals and the paired test, pure Python
 src/learning_curve.py      group-aware training-pool subsampling
-src/predict.py             the command-line demo
+src/predict.py             the command-line demo, with an optional refusal cutoff
+src/abstention.py          the refusal option: cutoffs over the pipeline's own confidence
 src/chapters.py            the 21 chapters
 src/paths.py               where things live, and the one write guard
 tests/test_split.py        33 tests, mostly about leakage
@@ -236,6 +237,7 @@ tests/test_intervals.py    22 tests, about the statistics
 tools/                     one-off measurements, not part of the pipeline
 tools/compare_runs.py      the seed runs both approaches are measured by
 tools/learning_curve.py    records fractional training-pool runs
-tools/report_results.py    writes RESULTS.md and the confusion matrices
+tools/report_results.py    writes RESULTS.md, the confusion matrices and the abstention curve
 tools/report_learning_curve.py  writes LEARNING-CURVE.md and its plot
+tools/report_abstention.py  sweeps the abstention cutoff and draws its curve
 ```
