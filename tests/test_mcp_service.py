@@ -30,13 +30,17 @@ def _hash(path: Path) -> str:
 
 
 def _write_policy(path: Path, model: Path, threshold: float = 0.0) -> Path:
-    path.write_text(json.dumps({
-        "schema_version": 1,
-        "confidence_threshold": threshold,
-        "selection_rule": "lowest validation threshold reaching 0.95 selective accuracy, else 0.00",
-        "model_sha256": _hash(model),
-        "validation_split_sha256": "0" * 64,
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "confidence_threshold": threshold,
+                "selection_rule": "lowest validation threshold reaching 0.95 selective accuracy, else 0.00",
+                "model_sha256": _hash(model),
+                "validation_split_sha256": "0" * 64,
+            }
+        )
+    )
     return path
 
 
@@ -128,8 +132,12 @@ def test_reader_returns_aggregate_pointers_only(tmp_path, monkeypatch):
     assert result["disclosure_mode"] == "pointers"
     assert set(result["questions"][0]) == {"number", "start_page", "pages"}
     assert set(result["reader"]) == {
-        "rung", "questions", "pages_read", "pages_without_text_layer",
-        "problems", "trustworthy",
+        "rung",
+        "questions",
+        "pages_read",
+        "pages_without_text_layer",
+        "problems",
+        "trustworthy",
     }
 
 

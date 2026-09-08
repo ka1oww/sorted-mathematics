@@ -24,7 +24,9 @@ def write_protocol_pdf(destination: Path) -> Path:
 def write_untrusted_pdf(destination: Path) -> Path:
     document = pymupdf.open()
     page = document.new_page()
-    page.insert_text((90.0, 120.0), "Synthetic prose without question markers.", fontsize=11)
+    page.insert_text(
+        (90.0, 120.0), "Synthetic prose without question markers.", fontsize=11
+    )
     document.save(destination)
     document.close()
     return destination

@@ -14,8 +14,6 @@ def write_fake_model(destination: Path) -> Path:
     """Write a deterministic 21-class model using synthetic training rows."""
     vectoriser = TfidfVectorizer().fit(["synthetic routing fixture"])
     classifier = DummyClassifier(strategy="prior")
-    classifier.fit(
-        numpy.arange(len(CHAPTER_SLUGS)).reshape(-1, 1), list(CHAPTER_SLUGS)
-    )
+    classifier.fit(numpy.arange(len(CHAPTER_SLUGS)).reshape(-1, 1), list(CHAPTER_SLUGS))
     joblib.dump((vectoriser, classifier), destination)
     return destination

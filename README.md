@@ -33,8 +33,7 @@ The local MCP server is the supported path from a clone to a client. It never
 ships a classifier, policy sidecar, corpus, or paper. Put the classifier and
 its matching policy sidecar outside this repository, on the same trusted
 machine. The sidecar binds the calibrated cutoff to the exact model hash and
-validation-split hash; create it from the trusted machine's aggregate
-abstention report with `tools/export_runtime_policy.py`.
+validation-split hash.
 
 ```
 python3 -m venv .venv
@@ -67,6 +66,22 @@ client configuration rather than being assumed inherited. The server exposes
 `classify_question`, `read_paper`, and the `sorted-mathematics://chapters`
 resource. `read_paper` returns question numbers and zero-based page spans only;
 it never sends extracted question text across MCP.
+
+Create the sidecar only in the trusted training environment, outside the
+repository. Its abstention report is a trusted JSON aggregate containing the
+selected cutoff, for example `{ "cutoff": 0.50 }`:
+
+```
+python3 tools/export_runtime_policy.py \
+  --model /ABSOLUTE/LOCAL/PATH/chapter_classifier.joblib \
+  --validation-split /ABSOLUTE/LOCAL/PATH/validation.jsonl \
+  --abstention-report /ABSOLUTE/LOCAL/PATH/abstention.json \
+  --output /ABSOLUTE/LOCAL/PATH/chapter_classifier.policy.json
+```
+
+The client needs only that model and its matching sidecar. Without them,
+`classify_question` returns a sanitized `model_unavailable` error, while
+`read_paper` and the chapters resource remain available.
 
 ## Command-line demo
 
@@ -324,6 +339,8 @@ src/runs.py                one from-scratch run of either approach, and the ledg
 src/intervals.py           confidence intervals and the paired test, pure Python
 src/learning_curve.py      group-aware training-pool subsampling
 src/reader.py              read_paper(): a PDF in, questions with page spans out
+src/mcp_service.py         local model, policy and pointer-only reader boundary
+src/mcp_server.py          FastMCP stdio transport for the two tools and chapter resource
 src/question_rule.py       the one rule both rungs run
 src/page_lines.py          lines from the PDF text layer
 src/page_ocr.py            lines from OCR, for papers mostly without text layers
@@ -344,6 +361,7 @@ tools/learning_curve.py    records fractional training-pool runs
 tools/report_results.py    writes RESULTS.md, the confusion matrices and the abstention curve
 tools/report_learning_curve.py  writes LEARNING-CURVE.md and its plot
 tools/report_abstention.py  sweeps the abstention cutoff and draws its curve
+tools/export_runtime_policy.py  writes a model-bound local MCP policy sidecar
 tools/score_reader.py      found, spurious and exact pages, never averaged
 tools/label_paper.py       a labelling skeleton for a new yardstick paper
 tools/make_scan_proxy.py   manufactures a scan from a digital paper

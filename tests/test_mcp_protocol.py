@@ -7,13 +7,13 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-import mcp_service as service
 
+import mcp_service as service
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER = ROOT / "src" / "mcp_server.py"
@@ -29,13 +29,17 @@ def _support_module(name: str):
 
 
 def _policy(path: Path, model: Path, threshold: float) -> Path:
-    path.write_text(json.dumps({
-        "schema_version": 1,
-        "confidence_threshold": threshold,
-        "selection_rule": "lowest validation threshold reaching 0.95 selective accuracy, else 0.00",
-        "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
-        "validation_split_sha256": "0" * 64,
-    }))
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "confidence_threshold": threshold,
+                "selection_rule": "lowest validation threshold reaching 0.95 selective accuracy, else 0.00",
+                "model_sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
+                "validation_split_sha256": "0" * 64,
+            }
+        )
+    )
     return path
 
 
@@ -51,18 +55,23 @@ def _payload(result):
 
 class ProtocolClient:
     def __init__(self, model: Path | None = None, policy: Path | None = None):
-        self.stderr = tempfile.TemporaryFile(mode="w+")
+        # The file stays open across the subprocess session for later inspection.
+        self.stderr = tempfile.TemporaryFile(mode="w+")  # noqa: SIM115
         environment = {
             key: value for key, value in os.environ.items() if key != "PYTHONPATH"
         }
         if model is not None and policy is not None:
-            environment.update({
-                "SORTED_MATH_MODEL_PATH": str(model),
-                "SORTED_MATH_POLICY_PATH": str(policy),
-            })
+            environment.update(
+                {
+                    "SORTED_MATH_MODEL_PATH": str(model),
+                    "SORTED_MATH_POLICY_PATH": str(policy),
+                }
+            )
         self.parameters = StdioServerParameters(
             command=os.environ.get("TEST_PYTHON", os.sys.executable),
-            args=[str(SERVER)], env=environment, cwd=ROOT,
+            args=[str(SERVER)],
+            env=environment,
+            cwd=ROOT,
         )
 
     async def __aenter__(self):
@@ -95,7 +104,10 @@ def test_stdio_server_protocol_and_sanitized_failures(tmp_path):
         async with ProtocolClient(model, policy) as client:
             assert client.initialized.serverInfo.name == "sorted-mathematics"
             tools = await client.session.list_tools()
-            assert [tool.name for tool in tools.tools] == ["classify_question", "read_paper"]
+            assert [tool.name for tool in tools.tools] == [
+                "classify_question",
+                "read_paper",
+            ]
             descriptions = {tool.name: tool.description for tool in tools.tools}
             assert descriptions["classify_question"] == service.CLASSIFY_QUESTION_DOC
             assert descriptions["read_paper"] == service.READ_PAPER_DOC
@@ -130,12 +142,22 @@ def test_stdio_server_protocol_and_sanitized_failures(tmp_path):
             paper_payload = _payload(paper_result)
             assert paper_payload["disclosure_mode"] == "pointers"
             assert set(paper_payload["questions"][0]) == {
-                "number", "start_page", "pages"
+                "number",
+                "start_page",
+                "pages",
             }
 
             for tool, arguments, code in (
-                ("classify_question", {"question_text": "synthetic client input", "how_many": 22}, "invalid_input"),
-                ("read_paper", {"pdf_path": str(tmp_path / "missing.pdf")}, "paper_unreadable"),
+                (
+                    "classify_question",
+                    {"question_text": "synthetic client input", "how_many": 22},
+                    "invalid_input",
+                ),
+                (
+                    "read_paper",
+                    {"pdf_path": str(tmp_path / "missing.pdf")},
+                    "paper_unreadable",
+                ),
                 ("read_paper", {"pdf_path": str(untrusted)}, "paper_untrusted"),
                 ("read_paper", {"pdf_path": str(scanned)}, "ocr_unavailable"),
             ):

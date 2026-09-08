@@ -16,11 +16,10 @@ from typing import Literal, TypedDict
 import joblib
 import pymupdf
 
-from chapters import CHAPTERS, CHAPTER_SLUGS
+from chapters import CHAPTER_SLUGS, CHAPTERS
 from features import normalise_question
 from page_ocr import OcrUnavailable
 from reader import PaperReadError, read_paper_with_report
-
 
 POLICY_SCHEMA_VERSION = 1
 SELECTION_RULE = (
@@ -69,8 +68,12 @@ class ServiceError(RuntimeError):
     def __init__(
         self,
         code: Literal[
-            "invalid_input", "model_unavailable", "paper_unreadable",
-            "paper_untrusted", "ocr_unavailable", "internal_error",
+            "invalid_input",
+            "model_unavailable",
+            "paper_unreadable",
+            "paper_untrusted",
+            "ocr_unavailable",
+            "internal_error",
         ],
         safe_message: str,
         data: dict[str, object] | None = None,
@@ -123,8 +126,11 @@ def _load_policy(path: Path) -> dict[str, object]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("runtime policy is unavailable") from error
     if not isinstance(raw, dict) or set(raw) != {
-        "schema_version", "confidence_threshold", "selection_rule",
-        "model_sha256", "validation_split_sha256",
+        "schema_version",
+        "confidence_threshold",
+        "selection_rule",
+        "model_sha256",
+        "validation_split_sha256",
     }:
         raise ValueError("runtime policy has an unsupported schema")
     threshold = raw["confidence_threshold"]
@@ -160,7 +166,9 @@ def _bootstrap_model() -> tuple[object, object, float] | ServiceError:
         if _sha256(MODEL_PATH) != policy["model_sha256"]:
             raise ValueError("runtime policy does not match the local model")
         return vectoriser, classifier, float(policy["confidence_threshold"])
-    except Exception:
+    # An untrusted local artifact can raise implementation-specific exceptions;
+    # all of them must leave classification unavailable without exposing details.
+    except Exception:  # noqa: BLE001
         return ServiceError(
             "model_unavailable",
             "Classifier is unavailable; check its local model and matching policy.",
@@ -177,8 +185,14 @@ def _model_or_error() -> tuple[object, object, float]:
 
 
 def _validate_how_many(how_many: int) -> int:
-    if isinstance(how_many, bool) or not isinstance(how_many, int) or not 1 <= how_many <= 21:
-        raise ServiceError("invalid_input", "how_many must be an integer from 1 through 21.")
+    if (
+        isinstance(how_many, bool)
+        or not isinstance(how_many, int)
+        or not 1 <= how_many <= 21
+    ):
+        raise ServiceError(
+            "invalid_input", "how_many must be an integer from 1 through 21."
+        )
     return how_many
 
 
@@ -198,10 +212,14 @@ def classify_question_payload(
     for index in ranked:
         confidence = float(probabilities[index])
         if not 0.0 <= confidence <= 1.0:
-            raise ServiceError("internal_error", "Classifier returned an invalid confidence.")
+            raise ServiceError(
+                "internal_error", "Classifier returned an invalid confidence."
+            )
         slug = str(classifier.classes_[index])
         if slug not in CHAPTERS:
-            raise ServiceError("internal_error", "Classifier returned an unknown chapter.")
+            raise ServiceError(
+                "internal_error", "Classifier returned an unknown chapter."
+            )
         candidates.append(
             {"slug": slug, "name": CHAPTERS[slug], "confidence": confidence}
         )
@@ -226,8 +244,12 @@ def _safe_reader_report(report: dict[str, object]) -> dict[str, object]:
     return {
         key: report.get(key)
         for key in (
-            "rung", "questions", "pages_read", "pages_without_text_layer",
-            "problems", "trustworthy",
+            "rung",
+            "questions",
+            "pages_read",
+            "pages_without_text_layer",
+            "problems",
+            "trustworthy",
         )
     }
 
@@ -242,7 +264,9 @@ def _project_question(question: dict[str, object]) -> PaperQuestion:
 
 def _validate_pdf_path(pdf_path: str) -> Path:
     if not isinstance(pdf_path, str) or not pdf_path.strip():
-        raise ServiceError("invalid_input", "pdf_path must be a nonblank local PDF path.")
+        raise ServiceError(
+            "invalid_input", "pdf_path must be a nonblank local PDF path."
+        )
     path = Path(pdf_path).expanduser()
     try:
         if path.suffix.lower() != ".pdf":
@@ -250,7 +274,9 @@ def _validate_pdf_path(pdf_path: str) -> Path:
         if not path.is_file() or not os.access(path, os.R_OK):
             raise ServiceError("paper_unreadable", "The requested PDF is unavailable.")
     except OSError as error:
-        raise ServiceError("paper_unreadable", "The requested PDF is unavailable.") from error
+        raise ServiceError(
+            "paper_unreadable", "The requested PDF is unavailable."
+        ) from error
     return path
 
 
@@ -271,7 +297,9 @@ def read_paper_payload(pdf_path: str) -> PaperResult:
             "OCR is unavailable for this paper; install the optional OCR requirements.",
         ) from error
     except (OSError, pymupdf.FileDataError, RuntimeError) as error:
-        raise ServiceError("paper_unreadable", "The requested PDF could not be read.") from error
+        raise ServiceError(
+            "paper_unreadable", "The requested PDF could not be read."
+        ) from error
     return {
         "disclosure_mode": "pointers",
         "questions": [_project_question(question) for question in questions],

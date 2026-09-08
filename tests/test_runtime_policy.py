@@ -47,4 +47,6 @@ def test_policy_refuses_a_repository_output_path(tmp_path, monkeypatch):
     report.write_text(json.dumps({"cutoff": 0.0}))
     monkeypatch.setattr(exporter, "PROJECT_ROOT", tmp_path)
     with pytest.raises(ValueError, match="outside the repository"):
-        exporter.write_policy(tmp_path / "policy.json", exporter.make_policy(model, split, report))
+        exporter.write_policy(
+            tmp_path / "policy.json", exporter.make_policy(model, split, report)
+        )

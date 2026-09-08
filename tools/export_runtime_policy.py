@@ -10,9 +10,8 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
-
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,7 +37,11 @@ def load_cutoff(report_path: Path) -> float:
         cutoff = report["cutoff"]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError) as error:
         raise ValueError("abstention report must be JSON with a cutoff") from error
-    if isinstance(cutoff, bool) or not isinstance(cutoff, (int, float)) or not 0 <= cutoff <= 1:
+    if (
+        isinstance(cutoff, bool)
+        or not isinstance(cutoff, (int, float))
+        or not 0 <= cutoff <= 1
+    ):
         raise ValueError("abstention report cutoff must be a number from 0 through 1")
     return float(cutoff)
 
@@ -61,7 +64,9 @@ def write_policy(destination: Path, policy: dict[str, object]) -> None:
         try:
             existing = json.loads(destination.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("existing policy is unreadable; refusing to overwrite it") from error
+            raise ValueError(
+                "existing policy is unreadable; refusing to overwrite it"
+            ) from error
         if existing.get("model_sha256") != policy["model_sha256"]:
             raise ValueError("refusing to overwrite a policy for a different model")
     destination.parent.mkdir(parents=True, exist_ok=True)
