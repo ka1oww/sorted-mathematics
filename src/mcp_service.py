@@ -101,7 +101,8 @@ READ_PAPER_DOC = (
 
 def _environment_path(name: str) -> Path | None:
     value = os.environ.get(name)
-    return Path(value).expanduser() if value else None
+    path = Path(value) if value else None
+    return path if path is not None and path.is_absolute() else None
 
 
 MODEL_PATH = _environment_path("SORTED_MATH_MODEL_PATH")

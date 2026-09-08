@@ -107,6 +107,19 @@ def test_mismatched_or_corrupt_policy_never_bootstraps_a_model(tmp_path, monkeyp
     assert error.value.code == "model_unavailable"
 
 
+def test_model_and_policy_paths_must_be_absolute(tmp_path, monkeypatch):
+    model = _write_model(tmp_path / "model.joblib")
+    policy = _write_policy(tmp_path / "policy.json", model)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SORTED_MATH_MODEL_PATH", model.name)
+    monkeypatch.setenv("SORTED_MATH_POLICY_PATH", policy.name)
+    sys.modules.pop("mcp_service", None)
+    service = importlib.import_module("mcp_service")
+    with pytest.raises(service.ServiceError) as error:
+        service.classify_question_payload("synthetic classifier input")
+    assert error.value.code == "model_unavailable"
+
+
 def test_reader_returns_aggregate_pointers_only(tmp_path, monkeypatch):
     from test_reader import write_paper
 
