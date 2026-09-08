@@ -24,7 +24,7 @@ _PREDICTOR = None
 MISSING_STACK = (
     "the scan path needs python-doctr==1.1.0, torch==2.14.0, "
     "torchvision==0.29.0 and opencv-python==5.0.0.93, none of which the "
-    "text-layer path requires. See the OCR path notes in CLAUDE.md."
+    "text-layer path requires. See the OCR path notes in AGENTS.md."
 )
 
 

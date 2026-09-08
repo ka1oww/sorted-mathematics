@@ -98,7 +98,7 @@ class TheProxyRecipes(unittest.TestCase):
 
 
 @unittest.skipUnless(public_papers.any_available(), public_papers.MISSING_PAPERS)
-@unittest.skipUnless(ocr_available(), "the OCR stack is not installed; see CLAUDE.md")
+@unittest.skipUnless(ocr_available(), "the OCR stack is not installed; see AGENTS.md")
 class TheScanPath(unittest.TestCase):
     def read(self, spec):
         return read_paper_with_report(ensure_proxy(spec), strict=False)
