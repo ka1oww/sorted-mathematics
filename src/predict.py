@@ -121,7 +121,15 @@ def main():
             raise SystemExit(1)
         pages = None
         if "--pages" in arguments:
-            pages = parse_pages(arguments[arguments.index("--pages") + 1])
+            pages_index = arguments.index("--pages")
+            if pages_index + 1 == len(arguments):
+                print("--pages needs a page range")
+                raise SystemExit(1)
+            try:
+                pages = parse_pages(arguments[pages_index + 1])
+            except ValueError:
+                print("--pages needs page numbers such as 1-5")
+                raise SystemExit(1)
         report_paper(arguments[1], pages)
         return
 
