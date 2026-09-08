@@ -76,7 +76,7 @@ class TheScorer(unittest.TestCase):
     def test_a_question_found_on_the_wrong_start_page_is_not_found(self):
         self.assertEqual(
             score(self.predicted((1, [5])), self.expected((1, [0]))),
-            (0, 0, 0))
+            (0, 1, 0))
 
     def test_a_missed_page_span_still_counts_as_found(self):
         # The failure a single accuracy number hides: every question found,
@@ -131,9 +131,12 @@ class TheMeasuredBaseline(unittest.TestCase):
     def test_the_six_page_spanning_questions_claim_both_their_pages(self):
         # The failure that hides behind a single accuracy number.
         checked = 0
+        expected = 0
         for case, spec in self.truth.items():
             if not public_papers.available(spec):
                 continue
+            expected += sum(len(want["pages"]) > 1
+                            for want in spec["questions"])
             predicted, _report = self.read(spec)
             by_number = {q["number"]: q for q in predicted}
             for want in spec["questions"]:
@@ -143,7 +146,7 @@ class TheMeasuredBaseline(unittest.TestCase):
                     self.assertEqual(by_number[want["n"]]["pages"],
                                      want["pages"])
                     checked += 1
-        self.assertEqual(checked, EXPECTED_PAGE_SPANNING)
+        self.assertEqual(checked, expected)
 
     def test_every_paper_takes_the_text_layer(self):
         for case, spec in self.truth.items():

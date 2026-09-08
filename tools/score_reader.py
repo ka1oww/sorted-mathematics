@@ -29,7 +29,7 @@ from reader import read_paper_with_report                       # noqa: E402
 def score(predicted, expected):
     """(found, spurious, exact_pages) for one paper."""
     by_number = {question["number"]: question for question in predicted}
-    labelled = {want["n"] for want in expected}
+    labelled_starts = {(want["n"], want["pages"][0]) for want in expected}
     found = exact = 0
     for want in expected:
         got = by_number.get(want["n"])
@@ -37,7 +37,8 @@ def score(predicted, expected):
             found += 1
             if list(got["pages"]) == list(want["pages"]):
                 exact += 1
-    spurious = len([q for q in predicted if q["number"] not in labelled])
+    spurious = len([q for q in predicted
+                    if (q["number"], q["start_page"]) not in labelled_starts])
     return found, spurious, exact
 
 
